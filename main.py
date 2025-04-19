@@ -171,5 +171,5 @@ if __name__ == "__main__":
         print("Webhook set successfully.")
 
     asyncio.run(main())
-    uvicorn.run("plato_ai_bot:app", host="0.0.0.0")
+    uvicorn.run("main:app", host="0.0.0.0")
             
