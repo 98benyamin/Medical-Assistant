@@ -12,33 +12,34 @@ import os
 import base64
 import uvicorn
 
-# لاگ‌گیری
+# Logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# تنظیمات
-TOKEN = "7158305425:AAHvpcyKIpucMqRxkxbK0o9INLJEetJ0A5o"  # توکن رو از محیط می‌گیره
+# Constants
+TOKEN = "7158305425:AAHvpcyKIpucMqRxkxbK0o9INLJEetJ0A5o"
 TEXT_API_URL = 'https://text.pollinations.ai/'
 WEBHOOK_URL = "https://medical-assistant-rum5.onrender.com/webhook"
-AI_CHAT_USERS = set()
 SYSTEM_MESSAGE = (
     "شما دستیار هوشمند PlatoDex هستید و درمورد پلاتو به کاربران کمک میکنید. "
     "به صورت خودمونی، نسل Z، باحال و با طنز جواب بده."
 )
 
-# ساخت اپلیکیشن و FastAPI
+# State
+AI_CHAT_USERS = set()
+
+# FastAPI + Telegram
 app = FastAPI()
 application = Application.builder().token(TOKEN).build()
 
 @app.post("/webhook")
 async def webhook(request: Request):
-    global application
     update = await request.json()
     update_obj = Update.de_json(update, application.bot)
-    await application.initialize()  # اضافه‌شده برای رفع ارور
+    await application.initialize()
     asyncio.create_task(application.process_update(update_obj))
     return {"status": "ok"}
 
@@ -46,11 +47,20 @@ async def webhook(request: Request):
 async def root():
     return {"message": "AI Chat Bot is running!"}
 
-# چت با هوش مصنوعی
+# Start command
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_name = update.effective_user.first_name
+    keyboard = [[InlineKeyboardButton("🤖 شروع چت با هوش مصنوعی", callback_data="chat_with_ai")]]
+    await update.message.reply_text(
+        f"سلام {user_name}! به ربات چت هوش مصنوعی خوش اومدی!",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# AI Chat button callback
 async def chat_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    user_id = update.effective_user.id
+    user_id = query.from_user.id
     AI_CHAT_USERS.add(user_id)
     context.user_data.clear()
     context.user_data["mode"] = "ai_chat"
@@ -60,17 +70,34 @@ async def chat_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🤖 چت با هوش مصنوعی فعال شد! هر چی می‌خوای بپرس، من هستم!",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    return ConversationHandler.END
 
-# پردازش پیام متنی
-async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Button navigation
+async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    data = update.callback_query.data
+    if data == "chat_with_ai":
+        return await chat_with_ai(update, context)
+    elif data == "back_to_home":
+        return await start(update.callback_query, context)
+
+# Text message handler (private or group)
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if user_id not in AI_CHAT_USERS or context.user_data.get("mode") != "ai_chat":
-        return ConversationHandler.END
+    message = update.message
+    text = message.text.lower()
 
-    user_message = update.message.text
+    trigger_words = ["سلام", "ربات", "پلاتو"]
+    should_reply = (
+        user_id in AI_CHAT_USERS or
+        message.chat.type != "private" and (
+            any(w in text for w in trigger_words) or message.reply_to_message and message.reply_to_message.from_user.id == context.bot.id
+        )
+    )
+
+    if not should_reply:
+        return
+
     chat_history = context.user_data.get("chat_history", [])
-    chat_history.append({"role": "user", "content": user_message})
+    chat_history.append({"role": "user", "content": message.text})
     context.user_data["chat_history"] = chat_history
 
     payload = {
@@ -86,16 +113,14 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ai_response = response.text.strip()
             chat_history.append({"role": "assistant", "content": ai_response})
             context.user_data["chat_history"] = chat_history
-            await update.message.reply_text(ai_response)
+            await message.reply_text(ai_response, reply_to_message_id=message.message_id)
         else:
-            await update.message.reply_text("خطایی رخ داد! لطفاً بعداً امتحان کن.")
+            await message.reply_text("خطایی رخ داد! بعداً امتحان کن.", reply_to_message_id=message.message_id)
     except Exception as e:
-        logger.error(f"API error: {e}")
-        await update.message.reply_text("یه مشکلی پیش اومد. بعداً دوباره امتحان کن!")
+        logger.error(f"AI error: {e}")
+        await message.reply_text("یه مشکلی پیش اومد. بعداً دوباره امتحان کن!", reply_to_message_id=message.message_id)
 
-    return ConversationHandler.END
-
-# آنالیز عکس
+# Photo handler
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in AI_CHAT_USERS:
@@ -125,42 +150,20 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = requests.post(TEXT_API_URL, json=payload, timeout=30)
         if response.status_code == 200:
             result = response.text.strip()
-            await update.message.reply_text(f"تجزیه و تحلیل تصویر:\n{result}")
+            await update.message.reply_text(f"تجزیه و تحلیل تصویر:\n{result}", reply_to_message_id=update.message.message_id)
         else:
-            await update.message.reply_text("نتونستم عکسو بررسی کنم! لطفاً بعداً امتحان کن.")
+            await update.message.reply_text("نتونستم عکسو بررسی کنم.", reply_to_message_id=update.message.message_id)
     except Exception as e:
         logger.error(f"Image analysis error: {e}")
-        await update.message.reply_text("یه مشکلی پیش اومد موقع بررسی عکس. 😕")
+        await update.message.reply_text("یه مشکلی پیش اومد موقع بررسی عکس.", reply_to_message_id=update.message.message_id)
 
-# دکمه شروع
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_name = update.message.from_user.first_name
-    keyboard = [[InlineKeyboardButton("🤖 شروع چت با هوش مصنوعی", callback_data="chat_with_ai")]]
-    await update.message.reply_text(
-        f"سلام {user_name}! به ربات چت هوش مصنوعی خوش اومدی!",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+# Register handlers
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CallbackQueryHandler(callback_router, pattern=".*"))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+application.add_handler(MessageHandler(filters.PHOTO, handle_image))
 
-# دکمه‌ها
-async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    data = update.callback_query.data
-    if data == "chat_with_ai":
-        return await chat_with_ai(update, context)
-    elif data == "back_to_home":
-        return await start(update.callback_query, context)
-
-# ثبت هندلرها
-app_handler_list = [
-    CommandHandler("start", start),
-    CallbackQueryHandler(callback_router),
-    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ai_message),
-    MessageHandler(filters.PHOTO, handle_image)
-]
-
-for handler in app_handler_list:
-    application.add_handler(handler)
-
-# ست کردن وبهوک و اجرای سرور
+# Webhook setup + FastAPI startup
 if __name__ == "__main__":
     async def main():
         bot = Bot(token=TOKEN)
@@ -168,5 +171,5 @@ if __name__ == "__main__":
         print("Webhook set successfully.")
 
     asyncio.run(main())
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    uvicorn.run("plato_ai_bot:app", host="0.0.0.0")
+            
