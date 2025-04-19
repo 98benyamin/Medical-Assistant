@@ -39,7 +39,11 @@ application = Application.builder().token(TOKEN).build()
 async def webhook(request: Request):
     update = await request.json()
     update_obj = Update.de_json(update, application.bot)
-    await application.initialize()
+
+    if not application.running:
+        await application.initialize()
+        await application.start()
+
     asyncio.create_task(application.process_update(update_obj))
     return {"status": "ok"}
 
