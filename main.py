@@ -1,5 +1,8 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters, ConversationHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
+from telegram.ext import (
+    Application, CommandHandler, ContextTypes,
+    CallbackQueryHandler, MessageHandler, filters, ConversationHandler
+)
 import logging
 import requests
 from fastapi import FastAPI, Request
@@ -7,26 +10,31 @@ import asyncio
 import tempfile
 import os
 import base64
+import uvicorn
 
 # لاگ‌گیری
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
 # تنظیمات
-TOKEN = '7158305425:AAHvpcyKIpucMqRxkxbK0o9INLJEetJ0A5o'
+TOKEN = "7158305425:AAHvpcyKIpucMqRxkxbK0o9INLJEetJ0A5o"  # توکن رو از محیط می‌گیره
 TEXT_API_URL = 'https://text.pollinations.ai/'
+WEBHOOK_URL = "https://medical-assistant-rum5.onrender.com/webhook"
 AI_CHAT_USERS = set()
 SYSTEM_MESSAGE = (
     "شما دستیار هوشمند PlatoDex هستید و درمورد پلاتو به کاربران کمک میکنید. "
     "به صورت خودمونی، نسل Z، باحال و با طنز جواب بده."
 )
 
+# ساخت اپلیکیشن و FastAPI
 app = FastAPI()
-application = None
+application = Application.builder().token(TOKEN).build()
 
 @app.post("/webhook")
 async def webhook(request: Request):
-    global application
     update = await request.json()
     update_obj = Update.de_json(update, application.bot)
     asyncio.create_task(application.process_update(update_obj))
@@ -36,7 +44,7 @@ async def webhook(request: Request):
 async def root():
     return {"message": "AI Chat Bot is running!"}
 
-# شروع چت با AI
+# چت با هوش مصنوعی
 async def chat_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -52,7 +60,7 @@ async def chat_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
-# پاسخ‌دهی به پیام متنی
+# پردازش پیام متنی
 async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in AI_CHAT_USERS or context.user_data.get("mode") != "ai_chat":
@@ -85,7 +93,7 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return ConversationHandler.END
 
-# آنالیز تصویر با Pollinations
+# آنالیز عکس
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in AI_CHAT_USERS:
@@ -122,7 +130,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Image analysis error: {e}")
         await update.message.reply_text("یه مشکلی پیش اومد موقع بررسی عکس. 😕")
 
-# صفحه شروع
+# دکمه شروع
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.message.from_user.first_name
     keyboard = [[InlineKeyboardButton("🤖 شروع چت با هوش مصنوعی", callback_data="chat_with_ai")]]
@@ -131,7 +139,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# مدیریت کلیک دکمه‌ها
+# دکمه‌ها
 async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = update.callback_query.data
     if data == "chat_with_ai":
@@ -139,10 +147,24 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "back_to_home":
         return await start(update.callback_query, context)
 
-# هندلرها
+# ثبت هندلرها
 app_handler_list = [
     CommandHandler("start", start),
     CallbackQueryHandler(callback_router),
     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ai_message),
     MessageHandler(filters.PHOTO, handle_image)
 ]
+
+for handler in app_handler_list:
+    application.add_handler(handler)
+
+# ست کردن وبهوک و اجرای سرور
+if __name__ == "__main__":
+    async def main():
+        bot = Bot(token=TOKEN)
+        await bot.set_webhook(url=WEBHOOK_URL)
+        print("Webhook set successfully.")
+
+    asyncio.run(main())
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
