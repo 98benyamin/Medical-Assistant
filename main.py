@@ -376,6 +376,39 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
 
+async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """بررسی عضویت کاربر پس از کلیک روی دکمه 'عضو شدم'"""
+    query = update.callback_query
+    await query.answer()
+    user = query.from_user
+    user_id = user.id
+    
+    # بروزرسانی آمار کاربر
+    update_user_stats(user_id, user.username, user.first_name)
+
+    is_member = await check_channel_membership(context.bot, user_id)
+    if not is_member:
+        await query.edit_message_text(
+            clean_text(
+                f"اوپس! 😅 هنوز تو کانال @{CHANNEL_ID} عضو نشدی!\n"
+                "لطفاً تو کانال عضو شو و دوباره دکمه 'عضو شدم' رو بزن! 🚑"
+            ),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("عضو کانال شو 📢", url=CHANNEL_LINK)],
+                [InlineKeyboardButton("عضو شدم! ✅", callback_data="check_membership")]
+            ])
+        )
+        return
+
+    welcome_message = clean_text(
+        f"آفرین {user.first_name}! حالا که تو کانال عضوی، دستیار پزشکی برات فعال شد! 🩺\n"
+        "می‌تونی درباره بیماری‌ها، داروها، برگه آزمایش یا نوار قلب سؤال کنی. چی تو سرته؟ 🧑🏻‍⚕"
+    )
+    keyboard = [
+        [InlineKeyboardButton("شروع مشاوره پزشکی 🤖", callback_data="chat_with_ai")]
+    ]
+    await query.edit_message_text(welcome_message, reply_markup=InlineKeyboardMarkup(keyboard))
+
 async def main():
     """راه‌اندازی ربات با وب‌هوک و سرور FastAPI"""
     global application
