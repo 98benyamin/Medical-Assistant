@@ -227,8 +227,14 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         PROCESSED_MESSAGES.add(message_id)
 
+    chat_id = update.message.chat_id
     keyboard = [[InlineKeyboardButton("🏠 Back to Home", callback_data="back_to_home")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # ارسال پیام موقت
+    temp_message = await update.message.reply_text(
+        clean_text("در حال آنالیز عکس، صبر کنید... ⏳")
+    )
 
     # دریافت عکس با بالاترین کیفیت
     photo = update.message.photo[-1]
@@ -262,6 +268,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         response = requests.post(TEXT_API_URL, json=payload, timeout=20)
+        # حذف پیام موقت
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
+        except TelegramError as e:
+            logger.error(f"خطا در حذف پیام موقت: {e}")
+
         if response.status_code == 200:
             # پردازش پاسخ JSON و استخراج content
             response_data = response.json()
@@ -276,6 +288,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup
             )
     except Exception as e:
+        # حذف پیام موقت در صورت خطا
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
+        except TelegramError as e:
+            logger.error(f"خطا در حذف پیام موقت: {e}")
         logger.error(f"خطا در تحلیل تصویر: {e}")
         await update.message.reply_text(
             clean_text("اییی، یه خطا تو تحلیل عکس پیش اومد! 😭 دوباره بفرست! 🚀"),
