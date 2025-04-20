@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import requests
+import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 from telegram.error import TelegramError
@@ -27,8 +28,9 @@ CHANNEL_ID = '@bbbyyyrt'
 SYSTEM_MESSAGE = (
     "شما دستیار هوشمند هستید و به صورت خودمونی، جذاب و با ایموجی حرف می‌زنید! 😎 "
     "به سبک نسل Z و با کمی طنز پاسخ بده و کاربر رو سرگرم کن. 🚀 "
-    "اگر تصویر دریافت کردی، محتوای اون رو به صورت خلاصه و باحال توصیف کن. "
-    "به سوالات کاربر خلاصه و دقیق جواب بده، مگر اینکه بخواد توضیح بیشتر بشنوه."
+    "اگر تصویر دریافت کردی، بر اساس سؤال یا کپشن کاربر، محتوای تصویر رو به صورت خلاصه و باحال توصیف کن یا به سؤالش جواب بده. "
+    "اگر سؤالی درباره تصویر نبود، یه توصیف خودمونی و باحال از تصویر بده. "
+    "به سوالات متنی کاربر خلاصه و دقیق جواب بده، مگر اینکه بخواد توضیح بیشتر بشنوه."
 )
 
 # مجموعه کاربران در حالت چت با هوش مصنوعی و قفل برای پردازش پیام‌ها
@@ -147,7 +149,7 @@ async def chat_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """فعال‌سازی حالت چت با هوش مصنوعی"""
     query = update.callback_query
     await query.answer()
-    user_id = update.effective_user.id
+    user_id = query.from_user.id
     AI_CHAT_USERS.add(user_id)
     context.user_data.clear()
     context.user_data["mode"] = "ai_chat"
@@ -155,7 +157,7 @@ async def chat_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("🏠 Back to Home", callback_data="back_to_home")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        clean_text("🤖 چت با هوش مصنوعی فعال شد!\n\nهر چی می‌خوای بگو یا یه عکس بفرست تا آنالیز کنم! 😎"),
+        clean_text("🤖 چت با هوش مصنوعی فعال شد!\n\nهر چی می‌خوای بگو یا یه عکس با کپشن بفرست تا آنالیز کنم! 😎"),
         reply_markup=reply_markup
     )
 
@@ -193,7 +195,10 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         response = requests.post(TEXT_API_URL, json=payload, timeout=20)
         if response.status_code == 200:
-            ai_response = clean_text(response.text.strip())
+            # پردازش پاسخ JSON و استخراج content
+            response_data = response.json()
+            ai_response = response_data.get("choices", [{}])[0].get("message", {}).get("content", "پاسخی دریافت نشد!")
+            ai_response = clean_text(ai_response.strip())
             chat_history.append({"role": "assistant", "content": ai_response})
             context.user_data["chat_history"] = chat_history
             await update.message.reply_text(ai_response, reply_markup=reply_markup)
@@ -230,12 +235,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file = await context.bot.get_file(photo.file_id)
     file_url = file.file_path
 
+    # بررسی کپشن (اگر وجود دارد)
+    caption = update.message.caption if update.message.caption else "این عکس چیه؟ به صورت خودمونی و با ایموجی توصیفش کن! 😎"
+
     # آماده‌سازی پیام برای تحلیل تصویر
     chat_history = context.user_data.get("chat_history", [])
     image_message = {
         "role": "user",
         "content": [
-            {"type": "text", "text": "این عکس چیه؟ به صورت خودمونی و با ایموجی توصیفش کن! 😎"},
+            {"type": "text", "text": caption},
             {"type": "image_url", "image_url": {"url": file_url}}
         ]
     }
@@ -255,7 +263,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         response = requests.post(TEXT_API_URL, json=payload, timeout=20)
         if response.status_code == 200:
-            ai_response = clean_text(response.text.strip())
+            # پردازش پاسخ JSON و استخراج content
+            response_data = response.json()
+            ai_response = response_data.get("choices", [{}])[0].get("message", {}).get("content", "پاسخی دریافت نشد!")
+            ai_response = clean_text(ai_response.strip())
             chat_history.append({"role": "assistant", "content": ai_response})
             context.user_data["chat_history"] = chat_history
             await update.message.reply_text(ai_response, reply_markup=reply_markup)
@@ -275,7 +286,7 @@ async def back_to_home(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """بازگشت به منوی اصلی"""
     query = update.callback_query
     await query.answer()
-    user_id = update.effective_user.id
+    user_id = query.from_user.id
     if user_id in AI_CHAT_USERS:
         AI_CHAT_USERS.remove(user_id)
     context.user_data.clear()
