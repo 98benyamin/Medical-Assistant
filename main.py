@@ -122,7 +122,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_member = await check_channel_membership(context.bot, user_id)
     if not is_member:
         welcome_message = clean_text(
-            f"سلام {user_name}!\nبرای استفاده از دستیار پزشکی، باید تو کانال @{CHANNEL_ID} عضو بشی! 😊\n"
+            f"سلام {user_name}!\nبرای استفاده از دستیار پزشکی، باید تو کانال عضو بشی! 🏥\n"
             "لطفاً تو کانال عضو شو و بعد دکمه 'عضو شدم' رو بزن! 🚑"
         )
         keyboard = [
@@ -134,7 +134,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     welcome_message = clean_text(
         f"سلام {user_name}!\nبه دستیار پزشکی هوشمند خوش اومدی! 🩺\n"
-        "می‌تونی درباره بیماری‌ها، داروها، برگه آزمایش یا نوار قلب سؤال کنی. چی تو سرته؟ 😎"
+        "می‌تونی درباره بیماری‌ها، داروها، برگه آزمایش یا نوار قلب سؤال کنی. چی تو سرته؟ 🧑🏻‍⚕"
     )
     keyboard = [
         [InlineKeyboardButton("شروع مشاوره پزشکی 🤖", callback_data="chat_with_ai")]
@@ -164,7 +164,7 @@ async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     welcome_message = clean_text(
         f"آفرین {user_name}! حالا که تو کانال عضوی، دستیار پزشکی برات فعال شد! 🩺\n"
-        "می‌تونی درباره بیماری‌ها، داروها، برگه آزمایش یا نوار قلب سؤال کنی. چی تو سرته؟ 😎"
+        "می‌تونی درباره بیماری‌ها، داروها، برگه آزمایش یا نوار قلب سؤال کنی. چی تو سرته؟ 🧑🏻‍⚕"
     )
     keyboard = [
         [InlineKeyboardButton("شروع مشاوره پزشکی 🤖", callback_data="chat_with_ai")]
@@ -207,9 +207,7 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["chat_history"] = chat_history
 
     # ارسال پیام موقت
-    temp_message = await update.message.reply_text(
-        clean_text("در حال نوشتن... ✍️")
-    )
+    temp_message = await update.message.reply_text(clean_text("🩺"))
 
     payload = {
         "model": "openai-large",
@@ -275,9 +273,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     # ارسال پیام موقت
-    temp_message = await update.message.reply_text(
-        clean_text("در حال آنالیز عکس، صبر کنید... ⏳")
-    )
+    temp_message = await update.message.reply_text(clean_text("🔬"))
 
     # دریافت عکس با بالاترین کیفیت
     photo = update.message.photo[-1]
@@ -353,7 +349,7 @@ async def back_to_home(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = query.from_user.first_name
     welcome_message = clean_text(
         f"سلام {user_name}!\nبه دستیار پزشکی هوشمند خوش اومدی! 🩺\n"
-        "می‌تونی درباره بیماری‌ها، داروها، برگه آزمایش یا نوار قلب سؤال کنی. چی تو سرته؟ 😎"
+        "می‌تونی درباره بیماری‌ها، داروها، برگه آزمایش یا نوار قلب سؤال کنی. چی تو سرته؟ 🧑🏻‍⚕"
     )
     keyboard = [
         [InlineKeyboardButton("شروع مشاوره پزشکی 🤖", callback_data="chat_with_ai")]
