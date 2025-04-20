@@ -79,7 +79,18 @@ async def webhook(request: Request):
 
 @app.get("/")
 async def root():
-    """نقطه ورود پایه برای بررسی سرور"""
+    """
+    نقطه ورود پایه برای بررسی سرور و پینگ UptimeRobot.
+    برای جلوگیری از خوابیدن سرویس در پلن رایگان Render، از UptimeRobot برای ارسال درخواست GET به این endpoint هر 5 دقیقه استفاده کنید.
+    مراحل تنظیم UptimeRobot:
+    1. در UptimeRobot ثبت‌نام کنید (https://uptimerobot.com/).
+    2. یک مانیتور جدید از نوع HTTP(s) ایجاد کنید.
+    3. URL را روی https://medical-assistant-rum5.onrender.com/ تنظیم کنید.
+    4. بازه زمانی را روی 5 دقیقه قرار دهید.
+    5. مانیتور را ذخیره کنید و مطمئن شوید پاسخ 200 OK دریافت می‌شود.
+    لاگ‌های Render را چک کنید تا درخواست‌های پینگ هر 5 دقیقه ثبت شوند.
+    """
+    logger.info("دریافت درخواست پینگ به /")
     return {"message": "Bot is running!"}
 
 def clean_text(text):
