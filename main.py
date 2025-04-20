@@ -23,6 +23,7 @@ TEXT_API_URL = 'https://text.pollinations.ai/openai'
 
 # شناسه کانال
 CHANNEL_ID = '@bbbyyyrt'
+CHANNEL_LINK = 'https://t.me/bbbyyyrt'
 
 # پیام سیستمی برای هوش مصنوعی
 SYSTEM_MESSAGE = """
@@ -117,9 +118,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_member:
         welcome_message = clean_text(
             f"سلام {user_name}!\nبرای استفاده از دستیار پزشکی، باید تو کانال @{CHANNEL_ID} عضو بشی! 😊\n"
-            "بعد از عضویت، دکمه زیر رو بزن تا ربات فعال بشه! 🚑"
+            "روی دکمه زیر بزن تا بری به کانال و عضو شی. بعدش 'عضو شدم' رو بزن! 🚑"
         )
         keyboard = [
+            [InlineKeyboardButton("عضو کانال شو 📢", url=CHANNEL_LINK)],
             [InlineKeyboardButton("عضو شدم! ✅", callback_data="check_membership")]
         ]
         await update.message.reply_text(welcome_message, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -146,9 +148,10 @@ async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             clean_text(
                 f"اوپس! 😅 هنوز تو کانال @{CHANNEL_ID} عضو نشدی!\n"
-                "لطفاً عضو شو و دوباره دکمه رو بزن! 🚑"
+                "روی دکمه زیر بزن تا عضو شی و بعد دوباره امتحان کن! 🚑"
             ),
             reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("عضو کانال شو 📢", url=CHANNEL_LINK)],
                 [InlineKeyboardButton("عضو شدم! ✅", callback_data="check_membership")]
             ])
         )
