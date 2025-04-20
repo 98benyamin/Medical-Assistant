@@ -192,10 +192,16 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         PROCESSED_MESSAGES.add(message_id)
 
+    chat_id = update.message.chat_id
     user_message = update.message.text
     chat_history = context.user_data.get("chat_history", [])
     chat_history.append({"role": "user", "content": user_message})
     context.user_data["chat_history"] = chat_history
+
+    # ارسال پیام موقت
+    temp_message = await update.message.reply_text(
+        clean_text("در حال نوشتن... ✍️")
+    )
 
     payload = {
         "model": "openai-large",
@@ -212,6 +218,12 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         response = requests.post(TEXT_API_URL, json=payload, timeout=20)
+        # حذف پیام موقت
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
+        except TelegramError as e:
+            logger.error(f"خطا در حذف پیام موقت: {e}")
+
         if response.status_code == 200:
             # پردازش پاسخ JSON و استخراج content
             response_data = response.json()
@@ -222,13 +234,18 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(ai_response, reply_markup=reply_markup)
         else:
             await update.message.reply_text(
-                clean_text("اوفف، یه مشکلی پیش اومد! 😅 دوباره سؤالت رو بپرس! 🚑"),
+                clean_text("اوپس، سیستم پزشکی‌مون یه لحظه قفل کرد! 🩺 لطفاً دوباره سؤالت رو بفرست. 😊"),
                 reply_markup=reply_markup
             )
     except Exception as e:
+        # حذف پیام موقت در صورت خطا
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
+        except TelegramError as e:
+            logger.error(f"خطا در حذف پیام موقت: {e}")
         logger.error(f"خطا در اتصال به API چت: {e}")
         await update.message.reply_text(
-            clean_text("اییی، یه خطا خوردم! 😭 دوباره سؤالت رو بپرس! 🚑"),
+            clean_text("اوه، انگار ابزار تشخیص‌مون نیاز به بررسی داره! 💉 لطفاً دوباره سؤالت رو بفرست. 😊"),
             reply_markup=reply_markup
         )
 
@@ -302,7 +319,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(ai_response, reply_markup=reply_markup)
         else:
             await update.message.reply_text(
-                clean_text("اوفف، API یه کم قاطی کرد! 😅 دوباره عکس رو بفرست! 🚑"),
+                clean_text("اوه، دستگاه تحلیل‌مون نیاز به تنظیم داره! 💉 لطفاً دوباره عکس رو بفرست. 🩻"),
                 reply_markup=reply_markup
             )
     except Exception as e:
@@ -313,7 +330,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"خطا در حذف پیام موقت: {e}")
         logger.error(f"خطا در تحلیل تصویر: {e}")
         await update.message.reply_text(
-            clean_text("اییی، یه خطا تو تحلیل عکس پیش اومد! 😭 دوباره عکس رو بفرست! 🚑"),
+            clean_text("اوپس، اسکنر پزشکی‌مون یه لحظه خاموش شد! 🩺 لطفاً دوباره عکس رو بفرست. 😊"),
             reply_markup=reply_markup
         )
 
@@ -347,9 +364,9 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت خطاها"""
     logger.error(f"خطا رخ داد: {context.error}")
     if update and hasattr(update, 'message') and update.message:
-        await update.message.reply_text(clean_text("یه مشکلی پیش اومد! 😅 دوباره امتحان کن!"))
+        await update.message.reply_text(clean_text("اوپس، سیستم کلینیکی‌مون یه لحظه قطع شد! 🩻 لطفاً دوباره امتحان کن. 😊"))
     elif update and hasattr(update, 'callback_query') and update.callback_query:
-        await update.callback_query.message.reply_text(clean_text("یه مشکلی پیش اومد! 😅 دوباره امتحان کن!"))
+        await update.callback_query.message.reply_text(clean_text("اوپس، سیستم کلینیکی‌مون یه لحظه قطع شد! 🩻 لطفاً دوباره امتحان کن. 😊"))
 
 async def main():
     """راه‌اندازی ربات با وب‌هوک و سرور FastAPI"""
