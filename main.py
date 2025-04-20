@@ -629,6 +629,28 @@ async def refresh_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await admin_panel(update, context)
 
+async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """دستور پشتیبانی"""
+    support_text = """
+👨‍💼 پشتیبانی فنی:
+برای گزارش مشکلات یا پیشنهادات می‌توانید:
+1. پیام خود را به @admin ارسال کنید
+2. از طریق ایمیل support@example.com با ما در تماس باشید
+3. در ساعات اداری با شماره 021-XXXXXXX تماس بگیرید
+
+⏰ ساعات پاسخگویی:
+شنبه تا چهارشنبه: 9:00 تا 17:00
+پنجشنبه: 9:00 تا 13:00
+    """
+    keyboard = [
+        [InlineKeyboardButton("📞 تماس با پشتیبانی", url="https://t.me/admin")],
+        [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="back_to_home")]
+    ]
+    await update.message.reply_text(
+        clean_text(support_text),
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
 async def main():
     """راه‌اندازی ربات"""
     global application
