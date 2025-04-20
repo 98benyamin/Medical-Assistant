@@ -12,6 +12,7 @@ import uvicorn
 from threading import Lock
 from datetime import datetime, timedelta
 from collections import defaultdict
+from utils import PersistentStorage, BackupManager, RateLimiter, ErrorReporter, ReminderSystem, AutoReporter
 
 # تنظیم لاگ
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -30,6 +31,14 @@ CHANNEL_LINK = 'https://t.me/bbbyyyrt'
 
 # تنظیمات مدیر
 ADMIN_ID = "6753257929"  # آیدی عددی مدیر به صورت رشته
+
+# ایجاد نمونه‌های سیستم‌های جدید
+storage = PersistentStorage()
+backup_manager = BackupManager()
+rate_limiter = RateLimiter(max_requests=5, time_window=60)
+error_reporter = ErrorReporter(ADMIN_ID)
+reminder_system = ReminderSystem()
+auto_reporter = AutoReporter(ADMIN_ID)
 
 # پیام سیستمی برای هوش مصنوعی
 SYSTEM_MESSAGE = """
@@ -69,14 +78,19 @@ app = FastAPI()
 
 class Statistics:
     def __init__(self):
-        self.total_users = 0  # تعداد کل کاربران
-        self.daily_users = defaultdict(set)  # کاربران روزانه
-        self.total_queries = 0  # تعداد کل پرسش‌ها
-        self.image_analyses = 0  # تعداد تحلیل تصاویر
-        self.user_sessions = {}  # جلسات کاربران
-        self.popular_topics = defaultdict(int)  # موضوعات پرتکرار
-        self.active_users = set()  # کاربران فعال
-        self.last_activity = {}  # آخرین فعالیت کاربران
+        self.storage = storage
+        self.load_from_storage()
+
+    def load_from_storage(self):
+        stored_stats = self.storage.data["stats"]
+        self.total_users = stored_stats.get("total_users", 0)
+        self.daily_users = defaultdict(set, stored_stats.get("daily_users", {}))
+        self.total_queries = stored_stats.get("total_queries", 0)
+        self.image_analyses = stored_stats.get("image_analyses", 0)
+        self.user_sessions = stored_stats.get("user_sessions", {})
+        self.popular_topics = defaultdict(int, stored_stats.get("popular_topics", {}))
+        self.active_users = set(stored_stats.get("active_users", []))
+        self.last_activity = stored_stats.get("last_activity", {})
 
     async def add_user(self, user_id: int):
         """ثبت کاربر جدید"""
@@ -85,6 +99,7 @@ class Statistics:
         self.daily_users[today].add(user_id)
         self.active_users.add(user_id)
         self.last_activity[user_id] = datetime.now()
+        await self.storage.update_stats(self)
 
     async def log_query(self, user_id: int, query_type: str, query_text: str):
         """ثبت پرسش جدید"""
@@ -99,6 +114,8 @@ class Statistics:
         keywords = self.extract_keywords(query_text)
         for keyword in keywords:
             self.popular_topics[keyword] += 1
+            
+        await self.storage.update_stats(self)
 
     def extract_keywords(self, text: str) -> list:
         """استخراج کلمات کلیدی از متن"""
@@ -343,6 +360,13 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in AI_CHAT_USERS or context.user_data.get("mode") != "ai_chat":
         return
 
+    # بررسی محدودیت نرخ درخواست
+    if not await rate_limiter.check_limit(user_id):
+        await update.message.reply_text(
+            clean_text("⏳ لطفاً کمی صبر کنید و دوباره تلاش کنید. برای جلوگیری از سوء استفاده، تعداد درخواست‌ها محدود شده است.")
+        )
+        return
+
     message_id = update.message.message_id
     with PROCESSING_LOCK:
         if message_id in PROCESSED_MESSAGES:
@@ -400,6 +424,7 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except TelegramError as e:
             logger.error(f"خطا در حذف پیام موقت: {e}")
         logger.error(f"خطا در اتصال به API چت: {e}")
+        await error_reporter.report_error(context.bot, e, "AI Message Handler")
         await update.message.reply_text(
             clean_text("اوه، انگار ابزار تشخیص‌مون نیاز به بررسی داره! 💉 لطفاً دوباره سؤالت رو بفرست. 😊"),
             reply_markup=reply_markup
@@ -409,6 +434,13 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت عکس‌های ارسالی و تحلیل با API Pollinations"""
     user_id = update.effective_user.id
     if user_id not in AI_CHAT_USERS or context.user_data.get("mode") != "ai_chat":
+        return
+
+    # بررسی محدودیت نرخ درخواست
+    if not await rate_limiter.check_limit(user_id):
+        await update.message.reply_text(
+            clean_text("⏳ لطفاً کمی صبر کنید و دوباره تلاش کنید. برای جلوگیری از سوء استفاده، تعداد درخواست‌ها محدود شده است.")
+        )
         return
 
     message_id = update.message.message_id
@@ -483,6 +515,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except TelegramError as e:
             logger.error(f"خطا در حذف پیام موقت: {e}")
         logger.error(f"خطا در تحلیل تصویر: {e}")
+        await error_reporter.report_error(context.bot, e, "Photo Handler")
         await update.message.reply_text(
             clean_text("اوپس، اسکنر پزشکی‌مون یه لحظه خاموش شد! 🩺 لطفاً دوباره عکس رو بفرست. 😊"),
             reply_markup=reply_markup
@@ -521,7 +554,16 @@ async def back_to_home(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت خطاها"""
-    logger.error(f"خطا رخ داد: {context.error}")
+    error = context.error
+    logger.error(f"خطا رخ داد: {error}")
+    
+    # گزارش خطا به مدیر
+    try:
+        await error_reporter.report_error(context.bot, error, "Error Handler")
+    except Exception as e:
+        logger.error(f"خطا در گزارش خطا به مدیر: {e}")
+    
+    # پاسخ به کاربر
     if update and hasattr(update, 'message') and update.message:
         await update.message.reply_text(clean_text("اوپس، سیستم کلینیکی‌مون یه لحظه قطع شد! 🩻 لطفاً دوباره امتحان کن. 😊"))
     elif update and hasattr(update, 'callback_query') and update.callback_query:
@@ -598,14 +640,19 @@ async def main():
         
         # اضافه کردن هندلرها
         application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("support", support_command))
         application.add_handler(CallbackQueryHandler(check_membership, pattern="^check_membership$"))
         application.add_handler(CallbackQueryHandler(chat_with_ai, pattern="^chat_with_ai$"))
         application.add_handler(CallbackQueryHandler(help_command, pattern="^help$"))
         application.add_handler(CallbackQueryHandler(admin_panel, pattern="^admin_panel$"))
         application.add_handler(CallbackQueryHandler(refresh_stats, pattern="^refresh_stats$"))
+        application.add_handler(CallbackQueryHandler(create_backup, pattern="^create_backup$"))
         application.add_handler(CallbackQueryHandler(back_to_home, pattern="^back_to_home$"))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ai_message))
         application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+        
+        # اضافه کردن هندلر خطا
+        application.add_error_handler(error_handler)
         
         # شروع ربات
         await application.initialize()
@@ -614,11 +661,39 @@ async def main():
         # راه‌اندازی FastAPI
         config = uvicorn.Config(app, host="0.0.0.0", port=8000)
         server = uvicorn.Server(config)
+        
+        # ایجاد پشتیبان اولیه
+        backup_manager.create_backup(storage.filename)
+        
+        # شروع چک کردن یادآوری‌ها
+        asyncio.create_task(check_reminders_periodically(application.bot))
+        
+        # شروع ارسال گزارش‌های خودکار
+        asyncio.create_task(send_auto_reports_periodically(application.bot))
+        
         await server.serve()
         
     except Exception as e:
         logger.error(f"خطا در راه‌اندازی ربات: {e}")
         raise
+
+async def check_reminders_periodically(bot):
+    """چک کردن دوره‌ای یادآوری‌ها"""
+    while True:
+        try:
+            await reminder_system.check_reminders(bot)
+        except Exception as e:
+            logger.error(f"خطا در چک کردن یادآوری‌ها: {e}")
+        await asyncio.sleep(60)  # هر دقیقه چک کن
+
+async def send_auto_reports_periodically(bot):
+    """ارسال دوره‌ای گزارش‌های خودکار"""
+    while True:
+        try:
+            await auto_reporter.send_daily_report(bot, stats)
+        except Exception as e:
+            logger.error(f"خطا در ارسال گزارش خودکار: {e}")
+        await asyncio.sleep(3600)  # هر ساعت چک کن
 
 if __name__ == "__main__":
     asyncio.run(main())
