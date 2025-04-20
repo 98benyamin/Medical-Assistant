@@ -10,6 +10,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import Response
 import uvicorn
 from threading import Lock
+from datetime import datetime, timedelta
+from collections import defaultdict
 
 # تنظیم لاگ
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -25,6 +27,9 @@ TEXT_API_URL = 'https://text.pollinations.ai/openai'
 # شناسه کانال
 CHANNEL_ID = '@bbbyyyrt'
 CHANNEL_LINK = 'https://t.me/bbbyyyrt'
+
+# تنظیمات مدیر
+ADMIN_ID = "6753257929"  # آیدی عددی مدیر به صورت رشته
 
 # پیام سیستمی برای هوش مصنوعی
 SYSTEM_MESSAGE = """
@@ -61,6 +66,84 @@ PROCESSED_MESSAGES = set()
 application = None
 
 app = FastAPI()
+
+class Statistics:
+    def __init__(self):
+        self.total_users = 0  # تعداد کل کاربران
+        self.daily_users = defaultdict(set)  # کاربران روزانه
+        self.total_queries = 0  # تعداد کل پرسش‌ها
+        self.image_analyses = 0  # تعداد تحلیل تصاویر
+        self.user_sessions = {}  # جلسات کاربران
+        self.popular_topics = defaultdict(int)  # موضوعات پرتکرار
+        self.active_users = set()  # کاربران فعال
+        self.last_activity = {}  # آخرین فعالیت کاربران
+
+    async def add_user(self, user_id: int):
+        """ثبت کاربر جدید"""
+        self.total_users += 1
+        today = datetime.now().strftime('%Y-%m-%d')
+        self.daily_users[today].add(user_id)
+        self.active_users.add(user_id)
+        self.last_activity[user_id] = datetime.now()
+
+    async def log_query(self, user_id: int, query_type: str, query_text: str):
+        """ثبت پرسش جدید"""
+        self.total_queries += 1
+        if query_type == 'image':
+            self.image_analyses += 1
+        
+        # بروزرسانی آخرین فعالیت
+        self.last_activity[user_id] = datetime.now()
+        
+        # ذخیره موضوعات پرتکرار
+        keywords = self.extract_keywords(query_text)
+        for keyword in keywords:
+            self.popular_topics[keyword] += 1
+
+    def extract_keywords(self, text: str) -> list:
+        """استخراج کلمات کلیدی از متن"""
+        common_medical_terms = ['سردرد', 'تب', 'درد', 'فشار خون', 'دیابت', 'قلب']
+        return [word for word in text.split() if word in common_medical_terms]
+
+    async def get_dashboard_stats(self) -> str:
+        """تولید آمار داشبورد"""
+        today = datetime.now().strftime('%Y-%m-%d')
+        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        
+        stats = {
+            "📊 آمار کلی": {
+                "👥 تعداد کل کاربران": self.total_users,
+                "🆕 کاربران جدید امروز": len(self.daily_users[today]),
+                "👤 کاربران دیروز": len(self.daily_users[yesterday]),
+                "❓ تعداد کل پرسش‌ها": self.total_queries,
+                "🖼 تحلیل تصاویر": self.image_analyses
+            },
+            "📈 موضوعات پرتکرار": dict(sorted(self.popular_topics.items(), 
+                                            key=lambda x: x[1], 
+                                            reverse=True)[:5]),
+            "👥 کاربران فعال": len([uid for uid, last in self.last_activity.items() 
+                                 if datetime.now() - last < timedelta(days=1)])
+        }
+        
+        return self.format_stats(stats)
+
+    def format_stats(self, stats: dict) -> str:
+        """فرمت‌بندی آمار برای نمایش"""
+        output = "📊 داشبورد مدیریت ربات پزشکی\n\n"
+        
+        for section, data in stats.items():
+            output += f"{section}:\n"
+            if isinstance(data, dict):
+                for key, value in data.items():
+                    output += f"{key}: {value}\n"
+            else:
+                output += f"{data}\n"
+            output += "\n"
+            
+        return output
+
+# ایجاد نمونه از کلاس آمار
+stats = Statistics()
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -151,9 +234,12 @@ async def check_channel_membership(bot, user_id):
         return False
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """ارسال پیام خوش‌آمدگویی با بررسی عضویت در کانال"""
+    """مدیریت دستور شروع"""
     user_id = update.effective_user.id
     user_name = update.message.from_user.first_name
+
+    # ثبت کاربر جدید در آمار
+    await stats.add_user(user_id)
 
     if user_id in AI_CHAT_USERS:
         AI_CHAT_USERS.remove(user_id)
@@ -176,10 +262,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"سلام {user_name}!\nبه دستیار پزشکی هوشمند خوش اومدی! 🩺\n"
         "می‌تونی درباره بیماری‌ها، داروها، برگه آزمایش یا نوار قلب سؤال کنی. چی تو سرته؟ 🧑🏻‍⚕"
     )
+    
+    # دکمه‌های پایه برای همه کاربران
     keyboard = [
-        [InlineKeyboardButton("شروع مشاوره پزشکی 🤖", callback_data="chat_with_ai")]
+        [InlineKeyboardButton("شروع مشاوره پزشکی 🤖", callback_data="chat_with_ai")],
+        [InlineKeyboardButton("راهنما ❓", callback_data="help")]
     ]
-    await update.message.reply_text(welcome_message, reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    # اضافه کردن دکمه مدیریت فقط برای مدیر
+    if str(user_id) == ADMIN_ID:
+        admin_keyboard = [[InlineKeyboardButton("پنل مدیریت 👨‍💻", callback_data="admin_panel")]]
+        keyboard.extend(admin_keyboard)
+    
+    await update.message.reply_text(
+        welcome_message,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """بررسی عضویت کاربر پس از کلیک روی دکمه 'عضو شدم'"""
@@ -206,10 +304,22 @@ async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"آفرین {user_name}! حالا که تو کانال عضوی، دستیار پزشکی برات فعال شد! 🩺\n"
         "می‌تونی درباره بیماری‌ها، داروها، برگه آزمایش یا نوار قلب سؤال کنی. چی تو سرته؟ 🧑🏻‍⚕"
     )
+    
+    # دکمه‌های پایه برای همه کاربران
     keyboard = [
-        [InlineKeyboardButton("شروع مشاوره پزشکی 🤖", callback_data="chat_with_ai")]
+        [InlineKeyboardButton("شروع مشاوره پزشکی 🤖", callback_data="chat_with_ai")],
+        [InlineKeyboardButton("راهنما ❓", callback_data="help")]
     ]
-    await query.edit_message_text(welcome_message, reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    # اضافه کردن دکمه مدیریت فقط برای مدیر
+    if str(user_id) == ADMIN_ID:
+        admin_keyboard = [[InlineKeyboardButton("پنل مدیریت 👨‍💻", callback_data="admin_panel")]]
+        keyboard.extend(admin_keyboard)
+    
+    await query.edit_message_text(
+        welcome_message,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 async def chat_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """فعال‌سازی حالت چت با هوش مصنوعی"""
@@ -387,22 +497,27 @@ async def back_to_home(update: Update, context: ContextTypes.DEFAULT_TYPE):
         AI_CHAT_USERS.remove(user_id)
     context.user_data.clear()
     user_name = query.from_user.first_name
+    
     welcome_message = clean_text(
         f"سلام {user_name}!\nبه دستیار پزشکی هوشمند خوش اومدی! 🩺\n"
         "می‌تونی درباره بیماری‌ها، داروها، برگه آزمایش یا نوار قلب سؤال کنی. چی تو سرته؟ 🧑🏻‍⚕"
     )
+    
+    # دکمه‌های پایه برای همه کاربران
     keyboard = [
-        [InlineKeyboardButton("شروع مشاوره پزشکی 🤖", callback_data="chat_with_ai")]
+        [InlineKeyboardButton("شروع مشاوره پزشکی 🤖", callback_data="chat_with_ai")],
+        [InlineKeyboardButton("راهنما ❓", callback_data="help")]
     ]
-    await context.bot.send_message(
-        chat_id=query.message.chat_id,
-        text=welcome_message,
+    
+    # اضافه کردن دکمه مدیریت فقط برای مدیر
+    if str(user_id) == ADMIN_ID:
+        admin_keyboard = [[InlineKeyboardButton("پنل مدیریت 👨‍💻", callback_data="admin_panel")]]
+        keyboard.extend(admin_keyboard)
+    
+    await query.message.edit_text(
+        welcome_message,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    try:
-        await query.message.delete()
-    except Exception as e:
-        logger.error(f"خطا در حذف پیام قبلی: {e}")
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت خطاها"""
@@ -412,36 +527,95 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif update and hasattr(update, 'callback_query') and update.callback_query:
         await update.callback_query.message.reply_text(clean_text("اوپس، سیستم کلینیکی‌مون یه لحظه قطع شد! 🩻 لطفاً دوباره امتحان کن. 😊"))
 
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """نمایش راهنمای ربات"""
+    help_text = """
+    🩺 راهنمای استفاده از دستیار پزشکی:
+    
+    1️⃣ سؤال پزشکی:
+       - هر سؤالی در مورد بیماری‌ها و داروها بپرسید
+       - راهنمایی درباره علائم و درمان‌های عمومی
+    
+    2️⃣ تحلیل آزمایش:
+       - عکس برگه آزمایش خود را ارسال کنید
+       - دریافت تحلیل شاخص‌های مهم
+    
+    3️⃣ تحلیل نوار قلب:
+       - تصویر ECG خود را ارسال کنید
+       - بررسی الگوهای اصلی
+    
+    ⚠️ یادآوری مهم:
+    این ربات جایگزین مشاوره پزشک نیست!
+    برای موارد حاد و تخصصی حتماً به پزشک مراجعه کنید.
+    """
+    keyboard = [
+        [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="back_to_home")]
+    ]
+    await update.callback_query.message.edit_text(
+        clean_text(help_text),
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """نمایش پنل مدیریت"""
+    user_id = update.callback_query.from_user.id
+    
+    if str(user_id) != ADMIN_ID:
+        await update.callback_query.answer("شما دسترسی به این بخش را ندارید! ⛔️")
+        return
+    
+    # دریافت آمار
+    dashboard_text = await stats.get_dashboard_stats()
+    
+    keyboard = [
+        [InlineKeyboardButton("🔄 بروزرسانی آمار", callback_data="refresh_stats")],
+        [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="back_to_home")]
+    ]
+    
+    await update.callback_query.message.edit_text(
+        dashboard_text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def refresh_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """بروزرسانی آمار در پنل مدیریت"""
+    user_id = update.callback_query.from_user.id
+    
+    if str(user_id) != ADMIN_ID:
+        await update.callback_query.answer("شما دسترسی به این بخش را ندارید! ⛔️")
+        return
+    
+    await admin_panel(update, context)
+
 async def main():
-    """راه‌اندازی ربات با وب‌هوک و سرور FastAPI"""
+    """راه‌اندازی ربات"""
     global application
     try:
-        # ساخت اپلیکیشن با توکن
         application = Application.builder().token(TOKEN).read_timeout(60).write_timeout(60).connect_timeout(60).build()
-
+        
         # تنظیم وب‌هوک
         await application.bot.set_webhook(url=WEBHOOK_URL)
-        logger.info(f"Webhook روی {WEBHOOK_URL} تنظیم شد.")
-
+        
         # اضافه کردن هندلرها
-        application.add_handler(CommandHandler("start", start, filters=filters.ChatType.PRIVATE))
+        application.add_handler(CommandHandler("start", start))
         application.add_handler(CallbackQueryHandler(check_membership, pattern="^check_membership$"))
         application.add_handler(CallbackQueryHandler(chat_with_ai, pattern="^chat_with_ai$"))
+        application.add_handler(CallbackQueryHandler(help_command, pattern="^help$"))
+        application.add_handler(CallbackQueryHandler(admin_panel, pattern="^admin_panel$"))
+        application.add_handler(CallbackQueryHandler(refresh_stats, pattern="^refresh_stats$"))
         application.add_handler(CallbackQueryHandler(back_to_home, pattern="^back_to_home$"))
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_ai_message))
-        application.add_handler(MessageHandler(filters.PHOTO & filters.ChatType.PRIVATE, handle_photo))
-
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ai_message))
+        application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+        
         # شروع ربات
-        logger.info("در حال آماده‌سازی ربات...")
         await application.initialize()
-        logger.info("در حال شروع ربات...")
         await application.start()
-
-        # راه‌اندازی سرور FastAPI
+        
+        # راه‌اندازی FastAPI
         config = uvicorn.Config(app, host="0.0.0.0", port=8000)
         server = uvicorn.Server(config)
         await server.serve()
-
+        
     except Exception as e:
         logger.error(f"خطا در راه‌اندازی ربات: {e}")
         raise
