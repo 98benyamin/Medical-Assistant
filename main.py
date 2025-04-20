@@ -651,6 +651,27 @@ async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+async def create_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """ایجاد پشتیبان از داده‌ها"""
+    user_id = update.callback_query.from_user.id
+    
+    if str(user_id) != ADMIN_ID:
+        await update.callback_query.answer("شما دسترسی به این بخش را ندارید! ⛔️")
+        return
+    
+    try:
+        backup_file = backup_manager.create_backup(storage.filename)
+        await update.callback_query.answer("✅ پشتیبان با موفقیت ایجاد شد!")
+        await update.callback_query.message.reply_text(
+            f"📦 پشتیبان جدید ایجاد شد:\n{backup_file}"
+        )
+    except Exception as e:
+        await error_reporter.report_error(context.bot, e, "Backup Creation")
+        await update.callback_query.answer("❌ خطا در ایجاد پشتیبان!")
+        await update.callback_query.message.reply_text(
+            "متأسفانه در ایجاد پشتیبان خطایی رخ داد. لطفاً دوباره تلاش کنید."
+        )
+
 async def main():
     """راه‌اندازی ربات"""
     global application
