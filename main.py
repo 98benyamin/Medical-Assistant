@@ -178,7 +178,7 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["chat_history"] = chat_history
 
     payload = {
-        "model": "openai",
+        "model": "openai-large",
         "messages": [
             {"role": "system", "content": SYSTEM_MESSAGE}
         ] + chat_history,
@@ -243,7 +243,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["chat_history"] = chat_history
 
     payload = {
-        "model": "openai",
+        "model": "openai-large",
         "messages": [
             {"role": "system", "content": SYSTEM_MESSAGE}
         ] + chat_history,
