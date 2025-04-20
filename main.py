@@ -180,8 +180,10 @@ async def back_to_home(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت خطاها"""
     logger.error(f"خطا رخ داد: {context.error}")
-    if update and update.message:
+    if update and hasattr(update, 'message') and update.message:
         await update.message.reply_text(clean_text("یه مشکلی پیش اومد! 😅 دوباره امتحان کن!"))
+    elif update and hasattr(update, 'callback_query') and update.callback_query:
+        await update.callback_query.message.reply_text(clean_text("یه مشکلی پیش اومد! 😅 دوباره امتحان کن!"))
 
 async def main():
     """راه‌اندازی ربات با وب‌هوک و سرور FastAPI"""
@@ -199,7 +201,6 @@ async def main():
         application.add_handler(CallbackQueryHandler(chat_with_ai, pattern="^chat_with_ai$"))
         application.add_handler(CallbackQueryHandler(back_to_home, pattern="^back_to_home$"))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_ai_message))
-        application.add_handler(error_handler)
 
         # شروع ربات
         logger.info("در حال آماده‌سازی ربات...")
