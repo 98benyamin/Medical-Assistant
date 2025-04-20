@@ -7,6 +7,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 from telegram.error import TelegramError
 from bs4 import BeautifulSoup  # اضافه شده اما استفاده نشده
 from fastapi import FastAPI, Request
+from fastapi.responses import Response
 import uvicorn
 from threading import Lock
 
@@ -78,7 +79,7 @@ async def webhook(request: Request):
     return {"status": "ok"}
 
 @app.get("/")
-async def root():
+async def root(request: Request):
     """
     نقطه ورود پایه برای بررسی سرور و پینگ UptimeRobot.
     برای جلوگیری از خوابیدن سرویس در پلن رایگان Render، از UptimeRobot برای ارسال درخواست GET به این endpoint هر 5 دقیقه استفاده کنید.
@@ -90,8 +91,36 @@ async def root():
     5. مانیتور را ذخیره کنید و مطمئن شوید پاسخ 200 OK دریافت می‌شود.
     لاگ‌های Render را چک کنید تا درخواست‌های پینگ هر 5 دقیقه ثبت شوند.
     """
-    logger.info("دریافت درخواست پینگ به /")
-    return {"message": "Bot is running!"}
+    # بررسی هدر User-Agent برای شناسایی درخواست‌های UptimeRobot
+    user_agent = request.headers.get("User-Agent", "Unknown")
+    if "UptimeRobot" in user_agent:
+        logger.info("دریافت درخواست پینگ از UptimeRobot")
+    else:
+        logger.info(f"دریافت درخواست به / از User-Agent: {user_agent}")
+    
+    # پاسخ به درخواست
+    try:
+        response = {"message": "Bot is running!"}
+        return response
+    except Exception as e:
+        logger.error(f"خطا در پاسخ به درخواست پینگ: {e}")
+        raise
+
+@app.head("/")
+async def root_head():
+    """
+    پشتیبانی از متد HEAD برای پینگ‌های UptimeRobot.
+    این endpoint به درخواست‌های HEAD پاسخ می‌دهد تا از خطای 405 جلوگیری شود.
+    """
+    return Response(status_code=200)
+
+@app.get("/favicon.ico")
+async def favicon():
+    """
+    پاسخ به درخواست‌های favicon.ico برای جلوگیری از خطای 404.
+    در حال حاضر یک پاسخ خالی با کد 204 برمی‌گرداند.
+    """
+    return Response(status_code=204)  # No Content
 
 def clean_text(text):
     """پاک‌سازی متن از تبلیغات و کاراکترهای غیرضروری"""
@@ -101,7 +130,7 @@ def clean_text(text):
     if '---' in text:
         text = text.split('---')[0].strip()
     # حذف کاراکترهای غیرضروری
-    text = text.replace("*", "").replace("`", "").replace("[", "").replace("]", "").replace("!", "!")
+    text = text.replace("*", "").replace("`", "").replace("]", "").replace("!", "!")
     # حذف تبلیغات خاص
     ad_texts = [
         "Powered by Pollinations.AI free text APIs. Support our mission(https://pollinations.ai/redirect/kofi) to keep AI accessible for everyone.",
