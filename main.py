@@ -86,7 +86,12 @@ def clean_text(text):
     """پاک‌سازی متن از تبلیغات و کاراکترهای غیرضروری"""
     if not text:
         return ""
+    # حذف متن بعد از ---
+    if '---' in text:
+        text = text.split('---')[0].strip()
+    # حذف کاراکترهای غیرضروری
     text = text.replace("*", "").replace("`", "").replace("[", "").replace("]", "").replace("!", "!")
+    # حذف تبلیغات خاص
     ad_texts = [
         "Powered by Pollinations.AI free text APIs. Support our mission(https://pollinations.ai/redirect/kofi) to keep AI accessible for everyone.",
         "توسط Pollinations.AI به صورت رایگان ارائه شده است. از مأموریت ما حمایت کنید(https://pollinations.ai/redirect/kofi) تا AI برای همه قابل دسترسی باشد."
@@ -118,7 +123,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_member:
         welcome_message = clean_text(
             f"سلام {user_name}!\nبرای استفاده از دستیار پزشکی، باید تو کانال @{CHANNEL_ID} عضو بشی! 😊\n"
-            "روی دکمه زیر بزن تا بری به کانال و عضو شی. بعدش 'عضو شدم' رو بزن! 🚑"
+            "لطفاً تو کانال عضو شو و بعد دکمه 'عضو شدم' رو بزن! 🚑"
         )
         keyboard = [
             [InlineKeyboardButton("عضو کانال شو 📢", url=CHANNEL_LINK)],
@@ -148,7 +153,7 @@ async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             clean_text(
                 f"اوپس! 😅 هنوز تو کانال @{CHANNEL_ID} عضو نشدی!\n"
-                "روی دکمه زیر بزن تا عضو شی و بعد دوباره امتحان کن! 🚑"
+                "لطفاً تو کانال عضو شو و دوباره دکمه 'عضو شدم' رو بزن! 🚑"
             ),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("عضو کانال شو 📢", url=CHANNEL_LINK)],
