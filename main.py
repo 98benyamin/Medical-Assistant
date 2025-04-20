@@ -17,9 +17,8 @@ logger = logging.getLogger(__name__)
 TOKEN = '8123059269:AAHlvWT2ZZ3iC1ICRkmiuwTjBHvdM-NLy18'
 WEBHOOK_URL = 'https://medical-assistant-rum5.onrender.com/webhook'
 
-# آدرس API چت و آنالیز تصویر
+# آدرس API متنی
 TEXT_API_URL = 'https://text.pollinations.ai/'
-IMAGE_API_URL = 'https://image.pollinations.ai/analyze'
 
 # شناسه کانال
 CHANNEL_ID = '@bbbyyyrt'
@@ -28,6 +27,7 @@ CHANNEL_ID = '@bbbyyyrt'
 SYSTEM_MESSAGE = (
     "شما دستیار هوشمند هستید و به صورت خودمونی، جذاب و با ایموجی حرف می‌زنید! 😎 "
     "به سبک نسل Z و با کمی طنز پاسخ بده و کاربر رو سرگرم کن. 🚀 "
+    "اگر URL تصویر دریافت کردی، محتوای تصویر رو به صورت خلاصه و باحال توصیف کن. "
     "به سوالات کاربر خلاصه و دقیق جواب بده، مگر اینکه بخواد توضیح بیشتر بشنوه."
 )
 
@@ -209,7 +209,7 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت عکس‌های ارسالی و آنالیز با API Pollinations"""
+    """مدیریت عکس‌های ارسالی و آنالیز با API متنی Pollinations"""
     user_id = update.effective_user.id
     if user_id not in AI_CHAT_USERS or context.user_data.get("mode") != "ai_chat":
         return
@@ -229,31 +229,33 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file = await context.bot.get_file(photo.file_id)
     file_url = file.file_path
 
+    # آماده‌سازی پیام برای API متنی
+    image_description_prompt = (
+        f"لطفاً محتوای تصویر در این URL رو به صورت خلاصه، خودمونی و با ایموجی توصیف کن: {file_url}"
+    )
+    chat_history = context.user_data.get("chat_history", [])
+    chat_history.append({"role": "user", "content": image_description_prompt})
+    context.user_data["chat_history"] = chat_history
+
+    payload = {
+        "messages": [
+            {"role": "system", "content": SYSTEM_MESSAGE}
+        ] + chat_history,
+        "model": "openai-large",
+        "seed": 42,
+        "jsonMode": False
+    }
+
     try:
-        # دانلود عکس
-        response = requests.get(file_url, timeout=10)
-        if response.status_code != 200:
-            await update.message.reply_text(
-                clean_text("اوفف، نمی‌تونم عکس رو دانلود کنم! 😅 دوباره امتحان کن! 🚀"),
-                reply_markup=reply_markup
-            )
-            return
-
-        # ارسال به API Pollinations برای آنالیز
-        files = {'image': ('photo.jpg', response.content, 'image/jpeg')}
-        payload = {"prompt": "Describe this image in a casual, fun way with emojis! 😎"}
-        api_response = requests.post(IMAGE_API_URL, files=files, data=payload, timeout=20)
-
-        if api_response.status_code == 200:
-            analysis = clean_text(api_response.text.strip())
-            chat_history = context.user_data.get("chat_history", [])
-            chat_history.append({"role": "user", "content": "[User sent an image]"})
-            chat_history.append({"role": "assistant", "content": analysis})
+        response = requests.post(TEXT_API_URL, json=payload, timeout=20)
+        if response.status_code == 200:
+            ai_response = clean_text(response.text.strip())
+            chat_history.append({"role": "assistant", "content": ai_response})
             context.user_data["chat_history"] = chat_history
-            await update.message.reply_text(analysis, reply_markup=reply_markup)
+            await update.message.reply_text(ai_response, reply_markup=reply_markup)
         else:
             await update.message.reply_text(
-                clean_text("اوفف، API تصویر یه کم قاطی کرد! 😅 دوباره امتحان کن! 🚀"),
+                clean_text("اوفف، API یه کم قاطی کرد! 😅 دوباره عکس بفرست! 🚀"),
                 reply_markup=reply_markup
             )
     except Exception as e:
