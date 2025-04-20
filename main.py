@@ -2,12 +2,10 @@ import asyncio
 import logging
 import requests
 import json
-import os
-from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 from telegram.error import TelegramError
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup  # اضافه شده اما استفاده نشده
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
 import uvicorn
@@ -28,168 +26,138 @@ TEXT_API_URL = 'https://text.pollinations.ai/openai'
 CHANNEL_ID = '@bbbyyyrt'
 CHANNEL_LINK = 'https://t.me/bbbyyyrt'
 
-# مسیر فایل دیتابیس
-DATABASE_FILE = 'database.json'
+# پیام سیستمی برای هوش مصنوعی
+SYSTEM_MESSAGE = """
+شما یک دستیار پزشکی هوشمند و حرفه‌ای هستید که به کاربران در حوزه سلامت و پزشکی کمک می‌کنید. 😊 با لحن خودمونی، مهربون و اطمینان‌بخش پاسخ بده، اما همیشه اطلاعات دقیق و علمی ارائه کن. وظایف شما:
 
-# تابع‌های مدیریت دیتابیس
-def load_database():
-    """بارگذاری اطلاعات از فایل دیتابیس"""
-    if os.path.exists(DATABASE_FILE):
-        with open(DATABASE_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return {
-        "users": {},
-        "statistics": {
-            "total_messages": 0,
-            "total_users": 0,
-            "total_photos": 0
-        },
-        "admins": [6753257929]
-    }
+1. **پاسخ به سؤالات پزشکی عمومی**:
+   - اگر کاربر درباره بیماری‌ها و داروهای مناسب پرسید، داروهای عمومی (مثل استامینوفن، ایبوپروفن، آموکسی‌سیلین) و کاربردهاشون رو توضیح بده.
+   - برای بیماری‌های ساده (مثل سرماخوردگی، سردرد)، راهکارهای عمومی و داروهای بدون نسخه پیشنهاد بده.
+   - اگر موضوع تخصصی یا پیچیده بود (مثل بیماری‌های مزمن یا داروهای خاص)، بنویس: «این مورد تخصصیه! 🚨 بهتره با یه پزشک متخصص در اون حوزه مشورت کنی.»
 
-def save_database(data):
-    """ذخیره اطلاعات در فایل دیتابیس"""
-    with open(DATABASE_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+2. **پاسخ به سؤالات درباره داروها**:
+   - اگر کاربر درباره داروها (مثل کاربرد، عوارض، یا دوز) پرسید، اطلاعات دقیق و عمومی ارائه بده.
+   - همیشه یادآوری کن که مصرف دارو باید تحت نظر پزشک باشه.
 
-def update_user_stats(user_id, username=None, first_name=None):
-    """بروزرسانی آمار کاربر"""
-    db = load_database()
-    if str(user_id) not in db["users"]:
-        db["users"][str(user_id)] = {
-            "username": username,
-            "first_name": first_name,
-            "join_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "message_count": 0,
-            "photo_count": 0,
-            "last_activity": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        db["statistics"]["total_users"] += 1
+3. **تحلیل تصاویر پزشکی**:
+   - **برگه آزمایش**: اگر تصویر برگه آزمایش دریافت کردی، شاخص‌های کلیدی (مثل گلبول‌های سفید، هموگلوبین، قند خون) رو استخراج کن و به‌صورت خلاصه توضیح بده که این اعداد چی نشون می‌دن. اگر مقادیر غیرعادی باشه، بنویس: «این مقدار خارج از محدوده نرماله، اما برای تشخیص دقیق باید با پزشک مشورت کنی. 🩺»
+   - **نوار قلب (ECG)**: اگر تصویر نوار قلب دریافت کردی، الگوهای اصلی (مثل ریتم، فاصله‌ها، یا ناهنجاری‌های واضح) رو تحلیل کن. توضیح بده که این الگوها ممکنه چی نشون بدن، اما تأکید کن: «تحلیل نوار قلب نیاز به بررسی تخصصی داره. حتماً با یه متخصص قلب مشورت کن. ❤️»
+   - اگر تصویر واضح نبود یا اطلاعات کافی نداشت، بنویس: «تصویر واضح نیست یا اطلاعات کافی نداره. لطفاً با پزشک مشورت کن. 🙏»
+
+4. **نکات مهم**:
+   - همیشه یادآوری کن که اطلاعات شما جایگزین نظر پزشک نیست و برای تشخیص یا درمان باید به پزشک مراجعه کنند.
+   - پاسخ‌ها رو خلاصه، دقیق و حداکثر در 300 توکن نگه دار، مگر اینکه کاربر جزئیات بیشتری بخواد.
+   - از ایموجی‌های مرتبط (مثل 🩺، ❤️، 💊) برای جذاب‌تر کردن پاسخ‌ها استفاده کن.
+   - اگر سؤال یا تصویر غیرمرتبط با پزشکی بود، با ادب بگو: «این موضوع به حوزه پزشکی ربطی نداره، اما اگه سؤال پزشکی داری، خوشحال می‌شم کمک کنم! 😊»
+
+با این اصول، به کاربر کمک کن که حس کنه یه دستیار قابل اعتماد کنارشه! 🚀
+"""
+
+# مجموعه کاربران در حالت چت با هوش مصنوعی و قفل برای پردازش پیام‌ها
+AI_CHAT_USERS = set()
+PROCESSING_LOCK = Lock()
+PROCESSED_MESSAGES = set()
+
+application = None
+
+app = FastAPI()
+
+@app.post("/webhook")
+async def webhook(request: Request):
+    """مدیریت درخواست‌های وب‌هوک"""
+    global application
+    update = await request.json()
+    update_obj = Update.de_json(update, application.bot)
+    update_id = update_obj.update_id
+    logger.info(f"دریافت درخواست با update_id: {update_id}")
+    with PROCESSING_LOCK:
+        if update_id in PROCESSED_MESSAGES:
+            logger.warning(f"درخواست تکراری با update_id: {update_id} - نادیده گرفته شد")
+            return {"status": "ok"}
+        PROCESSED_MESSAGES.add(update_id)
+    asyncio.create_task(application.process_update(update_obj))
+    return {"status": "ok"}
+
+@app.get("/")
+async def root(request: Request):
+    """
+    نقطه ورود پایه برای بررسی سرور و پینگ UptimeRobot.
+    برای جلوگیری از خوابیدن سرویس در پلن رایگان Render، از UptimeRobot برای ارسال درخواست GET به این endpoint هر 5 دقیقه استفاده کنید.
+    مراحل تنظیم UptimeRobot:
+    1. در UptimeRobot ثبت‌نام کنید (https://uptimerobot.com/).
+    2. یک مانیتور جدید از نوع HTTP(s) ایجاد کنید.
+    3. URL را روی https://medical-assistant-rum5.onrender.com/ تنظیم کنید.
+    4. بازه زمانی را روی 5 دقیقه قرار دهید.
+    5. مانیتور را ذخیره کنید و مطمئن شوید پاسخ 200 OK دریافت می‌شود.
+    لاگ‌های Render را چک کنید تا درخواست‌های پینگ هر 5 دقیقه ثبت شوند.
+    """
+    # بررسی هدر User-Agent و هدر سفارشی برای شناسایی درخواست‌های UptimeRobot
+    user_agent = request.headers.get("User-Agent", "Unknown")
+    uptime_robot_header = request.headers.get("X-UptimeRobot", None)
     
-    db["users"][str(user_id)]["last_activity"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    save_database(db)
-    return db
+    if uptime_robot_header == "Ping":
+        logger.info("دریافت درخواست پینگ از UptimeRobot (هدر سفارشی)")
+    elif "UptimeRobot" in user_agent:
+        logger.info("دریافت درخواست پینگ از UptimeRobot (User-Agent)")
+    else:
+        logger.info(f"دریافت درخواست به / از User-Agent: {user_agent}")
+    
+    # پاسخ به درخواست
+    try:
+        response = {"message": "Bot is running!"}
+        return response
+    except Exception as e:
+        logger.error(f"خطا در پاسخ به درخواست پینگ: {e}")
+        raise
 
-def increment_message_count(user_id, is_photo=False):
-    """افزایش تعداد پیام‌های کاربر"""
-    db = load_database()
-    if str(user_id) in db["users"]:
-        if is_photo:
-            db["users"][str(user_id)]["photo_count"] += 1
-            db["statistics"]["total_photos"] += 1
-        else:
-            db["users"][str(user_id)]["message_count"] += 1
-        db["statistics"]["total_messages"] += 1
-        save_database(db)
+@app.head("/")
+async def root_head():
+    """
+    پشتیبانی از متد HEAD برای پینگ‌های UptimeRobot.
+    این endpoint به درخواست‌های HEAD پاسخ می‌دهد تا از خطای 405 جلوگیری شود.
+    """
+    return Response(status_code=200)
 
-def is_admin(user_id):
-    """بررسی ادمین بودن کاربر"""
-    db = load_database()
-    return user_id in db["admins"]
+@app.get("/favicon.ico")
+async def favicon():
+    """
+    پاسخ به درخواست‌های favicon.ico برای جلوگیری از خطای 404.
+    در حال حاضر یک پاسخ خالی با کد 204 برمی‌گرداند.
+    """
+    return Response(status_code=204)  # No Content
 
-# دستورات ادمین
-async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش پنل ادمین"""
-    user_id = update.effective_user.id
-    if not is_admin(user_id):
-        await update.message.reply_text("⛔️ شما دسترسی به این بخش را ندارید!")
-        return
-
-    db = load_database()
-    stats = db["statistics"]
-    active_users = sum(1 for user in db["users"].values() 
-                      if (datetime.now() - datetime.strptime(user["last_activity"], "%Y-%m-%d %H:%M:%S")).days < 7)
-
-    stats_message = (
-        "📊 آمار ربات:\n\n"
-        f"👥 تعداد کل کاربران: {stats['total_users']}\n"
-        f"👤 کاربران فعال (7 روز اخیر): {active_users}\n"
-        f"💬 تعداد کل پیام‌ها: {stats['total_messages']}\n"
-        f"🖼 تعداد کل تصاویر: {stats['total_photos']}\n"
-    )
-
-    keyboard = [
-        [InlineKeyboardButton("📊 آمار تفصیلی", callback_data="detailed_stats")],
-        [InlineKeyboardButton("👥 لیست کاربران", callback_data="users_list")]
+def clean_text(text):
+    """پاک‌سازی متن از تبلیغات و کاراکترهای غیرضروری"""
+    if not text:
+        return ""
+    # حذف متن بعد از ---
+    if '---' in text:
+        text = text.split('---')[0].strip()
+    # حذف کاراکترهای غیرضروری
+    text = text.replace("*", "").replace("`", "").replace("[", "").replace("]", "").replace("!", "!")
+    # حذف تبلیغات خاص
+    ad_texts = [
+        "Powered by Pollinations.AI free text APIs. Support our mission(https://pollinations.ai/redirect/kofi) to keep AI accessible for everyone.",
+        "توسط Pollinations.AI به صورت رایگان ارائه شده است. از مأموریت ما حمایت کنید(https://pollinations.ai/redirect/kofi) تا AI برای همه قابل دسترسی باشد."
     ]
-    await update.message.reply_text(stats_message, reply_markup=InlineKeyboardMarkup(keyboard))
+    for ad_text in ad_texts:
+        if ad_text in text:
+            text = text.replace(ad_text, "").strip()
+    return text.strip()
 
-async def detailed_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش آمار تفصیلی"""
-    query = update.callback_query
-    await query.answer()
-    
-    if not is_admin(query.from_user.id):
-        await query.edit_message_text("⛔️ شما دسترسی به این بخش را ندارید!")
-        return
-
-    db = load_database()
-    users = db["users"]
-    
-    # محاسبه آمار
-    today_active = sum(1 for user in users.values() 
-                      if (datetime.now() - datetime.strptime(user["last_activity"], "%Y-%m-%d %H:%M:%S")).days < 1)
-    week_active = sum(1 for user in users.values() 
-                     if (datetime.now() - datetime.strptime(user["last_activity"], "%Y-%m-%d %H:%M:%S")).days < 7)
-    month_active = sum(1 for user in users.values() 
-                      if (datetime.now() - datetime.strptime(user["last_activity"], "%Y-%m-%d %H:%M:%S")).days < 30)
-
-    stats_message = (
-        "📊 آمار تفصیلی:\n\n"
-        f"📅 کاربران فعال امروز: {today_active}\n"
-        f"📆 کاربران فعال هفته: {week_active}\n"
-        f"📅 کاربران فعال ماه: {month_active}\n"
-        f"💬 میانگین پیام هر کاربر: {db['statistics']['total_messages'] / len(users) if users else 0:.1f}\n"
-        f"🖼 میانگین تصویر هر کاربر: {db['statistics']['total_photos'] / len(users) if users else 0:.1f}\n"
-    )
-
-    keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_admin")]]
-    await query.edit_message_text(stats_message, reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def users_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش لیست کاربران"""
-    query = update.callback_query
-    await query.answer()
-    
-    if not is_admin(query.from_user.id):
-        await query.edit_message_text("⛔️ شما دسترسی به این بخش را ندارید!")
-        return
-
-    db = load_database()
-    users = db["users"]
-    
-    # مرتب‌سازی کاربران بر اساس آخرین فعالیت
-    sorted_users = sorted(users.items(), 
-                         key=lambda x: datetime.strptime(x[1]["last_activity"], "%Y-%m-%d %H:%M:%S"),
-                         reverse=True)[:10]  # نمایش 10 کاربر آخر
-
-    users_message = "👥 آخرین کاربران فعال:\n\n"
-    for user_id, user_data in sorted_users:
-        users_message += (
-            f"👤 نام: {user_data['first_name']}\n"
-            f"🆔 یوزرنیم: @{user_data['username'] if user_data['username'] else 'ندارد'}\n"
-            f"💬 تعداد پیام: {user_data['message_count']}\n"
-            f"🖼 تعداد تصویر: {user_data['photo_count']}\n"
-            f"⏱ آخرین فعالیت: {user_data['last_activity']}\n"
-            "➖➖➖➖➖➖➖➖\n"
-        )
-
-    keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_admin")]]
-    await query.edit_message_text(users_message, reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def back_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """بازگشت به پنل ادمین"""
-    query = update.callback_query
-    await query.answer()
-    await admin_panel(update, context)
+async def check_channel_membership(bot, user_id):
+    """بررسی عضویت کاربر در کانال"""
+    try:
+        member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
+        return member.status in ['member', 'administrator', 'creator']
+    except TelegramError as e:
+        logger.error(f"خطا در بررسی عضویت کاربر {user_id} در کانال {CHANNEL_ID}: {e}")
+        return False
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ارسال پیام خوش‌آمدگویی با بررسی عضویت در کانال"""
-    user = update.effective_user
-    user_id = user.id
-    
-    # بروزرسانی آمار کاربر
-    update_user_stats(user_id, user.username, user.first_name)
+    user_id = update.effective_user.id
+    user_name = update.message.from_user.first_name
 
     if user_id in AI_CHAT_USERS:
         AI_CHAT_USERS.remove(user_id)
@@ -198,7 +166,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_member = await check_channel_membership(context.bot, user_id)
     if not is_member:
         welcome_message = clean_text(
-            f"سلام {user.first_name}!\nبرای استفاده از دستیار پزشکی، باید تو کانال عضو بشی! 🏥\n"
+            f"سلام {user_name}!\nبرای استفاده از دستیار پزشکی، باید تو کانال عضو بشی! 🏥\n"
             "لطفاً تو کانال عضو شو و بعد دکمه 'عضو شدم' رو بزن! 🚑"
         )
         keyboard = [
@@ -209,7 +177,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     welcome_message = clean_text(
-        f"سلام {user.first_name}!\nبه دستیار پزشکی هوشمند خوش اومدی! 🩺\n"
+        f"سلام {user_name}!\nبه دستیار پزشکی هوشمند خوش اومدی! 🩺\n"
         "می‌تونی درباره بیماری‌ها، داروها، برگه آزمایش یا نوار قلب سؤال کنی. چی تو سرته؟ 🧑🏻‍⚕"
     )
     keyboard = [
@@ -217,15 +185,55 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text(welcome_message, reply_markup=InlineKeyboardMarkup(keyboard))
 
+async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """بررسی عضویت کاربر پس از کلیک روی دکمه 'عضو شدم'"""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    user_name = query.from_user.first_name
+
+    is_member = await check_channel_membership(context.bot, user_id)
+    if not is_member:
+        await query.edit_message_text(
+            clean_text(
+                f"اوپس! 😅 هنوز تو کانال @{CHANNEL_ID} عضو نشدی!\n"
+                "لطفاً تو کانال عضو شو و دوباره دکمه 'عضو شدم' رو بزن! 🚑"
+            ),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("عضو کانال شو 📢", url=CHANNEL_LINK)],
+                [InlineKeyboardButton("عضو شدم! ✅", callback_data="check_membership")]
+            ])
+        )
+        return
+
+    welcome_message = clean_text(
+        f"آفرین {user_name}! حالا که تو کانال عضوی، دستیار پزشکی برات فعال شد! 🩺\n"
+        "می‌تونی درباره بیماری‌ها، داروها، برگه آزمایش یا نوار قلب سؤال کنی. چی تو سرته؟ 🧑🏻‍⚕"
+    )
+    keyboard = [
+        [InlineKeyboardButton("شروع مشاوره پزشکی 🤖", callback_data="chat_with_ai")]
+    ]
+    await query.edit_message_text(welcome_message, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def chat_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """فعال‌سازی حالت چت با هوش مصنوعی"""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    AI_CHAT_USERS.add(user_id)
+    context.user_data.clear()
+    context.user_data["mode"] = "ai_chat"
+    context.user_data["chat_history"] = []
+    keyboard = [[InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="back_to_home")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(
+        clean_text("🤖 دستیار پزشکی فعال شد!\n\nسؤالت درباره بیماری، دارو، برگه آزمایش یا نوار قلب چیه؟ 😊"),
+        reply_markup=reply_markup
+    )
+
 async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت پیام‌های متنی کاربر در حالت چت با هوش مصنوعی"""
-    user = update.effective_user
-    user_id = user.id
-    
-    # بروزرسانی آمار کاربر
-    update_user_stats(user_id, user.username, user.first_name)
-    increment_message_count(user_id)
-    
+    user_id = update.effective_user.id
     if user_id not in AI_CHAT_USERS or context.user_data.get("mode") != "ai_chat":
         return
 
@@ -267,6 +275,7 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"خطا در حذف پیام موقت: {e}")
 
         if response.status_code == 200:
+            # پردازش پاسخ JSON و استخراج content
             response_data = response.json()
             ai_response = response_data.get("choices", [{}])[0].get("message", {}).get("content", "پاسخی دریافت نشد!")
             ai_response = clean_text(ai_response.strip())
@@ -279,6 +288,7 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup
             )
     except Exception as e:
+        # حذف پیام موقت در صورت خطا
         try:
             await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
         except TelegramError as e:
@@ -291,13 +301,7 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت عکس‌های ارسالی و تحلیل با API Pollinations"""
-    user = update.effective_user
-    user_id = user.id
-    
-    # بروزرسانی آمار کاربر
-    update_user_stats(user_id, user.username, user.first_name)
-    increment_message_count(user_id, is_photo=True)
-    
+    user_id = update.effective_user.id
     if user_id not in AI_CHAT_USERS or context.user_data.get("mode") != "ai_chat":
         return
 
@@ -354,6 +358,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"خطا در حذف پیام موقت: {e}")
 
         if response.status_code == 200:
+            # پردازش پاسخ JSON و استخراج content
             response_data = response.json()
             ai_response = response_data.get("choices", [{}])[0].get("message", {}).get("content", "پاسخی دریافت نشد!")
             ai_response = clean_text(ai_response.strip())
@@ -366,6 +371,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup
             )
     except Exception as e:
+        # حذف پیام موقت در صورت خطا
         try:
             await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
         except TelegramError as e:
@@ -376,38 +382,39 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
 
-async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """بررسی عضویت کاربر پس از کلیک روی دکمه 'عضو شدم'"""
+async def back_to_home(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """بازگشت به منوی اصلی"""
     query = update.callback_query
     await query.answer()
-    user = query.from_user
-    user_id = user.id
-    
-    # بروزرسانی آمار کاربر
-    update_user_stats(user_id, user.username, user.first_name)
-
-    is_member = await check_channel_membership(context.bot, user_id)
-    if not is_member:
-        await query.edit_message_text(
-            clean_text(
-                f"اوپس! 😅 هنوز تو کانال @{CHANNEL_ID} عضو نشدی!\n"
-                "لطفاً تو کانال عضو شو و دوباره دکمه 'عضو شدم' رو بزن! 🚑"
-            ),
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("عضو کانال شو 📢", url=CHANNEL_LINK)],
-                [InlineKeyboardButton("عضو شدم! ✅", callback_data="check_membership")]
-            ])
-        )
-        return
-
+    user_id = query.from_user.id
+    if user_id in AI_CHAT_USERS:
+        AI_CHAT_USERS.remove(user_id)
+    context.user_data.clear()
+    user_name = query.from_user.first_name
     welcome_message = clean_text(
-        f"آفرین {user.first_name}! حالا که تو کانال عضوی، دستیار پزشکی برات فعال شد! 🩺\n"
+        f"سلام {user_name}!\nبه دستیار پزشکی هوشمند خوش اومدی! 🩺\n"
         "می‌تونی درباره بیماری‌ها، داروها، برگه آزمایش یا نوار قلب سؤال کنی. چی تو سرته؟ 🧑🏻‍⚕"
     )
     keyboard = [
         [InlineKeyboardButton("شروع مشاوره پزشکی 🤖", callback_data="chat_with_ai")]
     ]
-    await query.edit_message_text(welcome_message, reply_markup=InlineKeyboardMarkup(keyboard))
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=welcome_message,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    try:
+        await query.message.delete()
+    except Exception as e:
+        logger.error(f"خطا در حذف پیام قبلی: {e}")
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت خطاها"""
+    logger.error(f"خطا رخ داد: {context.error}")
+    if update and hasattr(update, 'message') and update.message:
+        await update.message.reply_text(clean_text("اوپس، سیستم کلینیکی‌مون یه لحظه قطع شد! 🩻 لطفاً دوباره امتحان کن. 😊"))
+    elif update and hasattr(update, 'callback_query') and update.callback_query:
+        await update.callback_query.message.reply_text(clean_text("اوپس، سیستم کلینیکی‌مون یه لحظه قطع شد! 🩻 لطفاً دوباره امتحان کن. 😊"))
 
 async def main():
     """راه‌اندازی ربات با وب‌هوک و سرور FastAPI"""
@@ -422,13 +429,9 @@ async def main():
 
         # اضافه کردن هندلرها
         application.add_handler(CommandHandler("start", start, filters=filters.ChatType.PRIVATE))
-        application.add_handler(CommandHandler("admin", admin_panel, filters=filters.ChatType.PRIVATE))
         application.add_handler(CallbackQueryHandler(check_membership, pattern="^check_membership$"))
         application.add_handler(CallbackQueryHandler(chat_with_ai, pattern="^chat_with_ai$"))
         application.add_handler(CallbackQueryHandler(back_to_home, pattern="^back_to_home$"))
-        application.add_handler(CallbackQueryHandler(detailed_stats, pattern="^detailed_stats$"))
-        application.add_handler(CallbackQueryHandler(users_list, pattern="^users_list$"))
-        application.add_handler(CallbackQueryHandler(back_to_admin, pattern="^back_to_admin$"))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_ai_message))
         application.add_handler(MessageHandler(filters.PHOTO & filters.ChatType.PRIVATE, handle_photo))
 
@@ -448,4 +451,4 @@ async def main():
         raise
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())
