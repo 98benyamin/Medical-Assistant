@@ -1,179 +1,220 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
-from telegram.ext import (
-    Application, CommandHandler, ContextTypes,
-    CallbackQueryHandler, MessageHandler, filters, ConversationHandler
-)
+import asyncio
 import logging
 import requests
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
+from bs4 import BeautifulSoup  # اضافه شده اما استفاده نشده
 from fastapi import FastAPI, Request
-import asyncio
-import tempfile
-import os
-import base64
 import uvicorn
+from threading import Lock
 
-# Logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+# تنظیم لاگ
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Constants
-TOKEN = "7158305425:AAHvpcyKIpucMqRxkxbK0o9INLJEetJ0A5o"
+# توکن و وب‌هوک جدید
+TOKEN = '8123059269:AAHlvWT2ZZ3iC1ICRkmiuwTjBHvdM-NLy18'
+WEBHOOK_URL = 'https://medical-assistant-rum5.onrender.com/webhook'
+
+# آدرس API چت
 TEXT_API_URL = 'https://text.pollinations.ai/'
-WEBHOOK_URL = "https://medical-assistant-rum5.onrender.com/webhook"
+
+# پیام سیستمی برای هوش مصنوعی
 SYSTEM_MESSAGE = (
-    "شما دستیار هوشمند PlatoDex هستید و درمورد پلاتو به کاربران کمک میکنید. "
-    "به صورت خودمونی، نسل Z، باحال و با طنز جواب بده."
+    "شما دستیار هوشمند هستید و به صورت خودمونی، جذاب و با ایموجی حرف می‌زنید! 😎 "
+    "به سبک نسل Z و با کمی طنز پاسخ بده و کاربر رو سرگرم کن. 🚀 "
+    "به سوالات کاربر خلاصه و دقیق جواب بده، مگر اینکه بخواد توضیح بیشتر بشنوه."
 )
 
-# State
+# مجموعه کاربران در حالت چت با هوش مصنوعی و قفل برای پردازش پیام‌ها
 AI_CHAT_USERS = set()
+PROCESSING_LOCK = Lock()
+PROCESSED_MESSAGES = set()
 
-# FastAPI + Telegram
+application = None
+
 app = FastAPI()
-application = Application.builder().token(TOKEN).build()
 
 @app.post("/webhook")
 async def webhook(request: Request):
+    """مدیریت درخواست‌های وب‌هوک"""
+    global application
     update = await request.json()
     update_obj = Update.de_json(update, application.bot)
-
-    if not application.running:
-        await application.initialize()
-        await application.start()
-
+    update_id = update_obj.update_id
+    logger.info(f"دریافت درخواست با update_id: {update_id}")
+    with PROCESSING_LOCK:
+        if update_id in PROCESSED_MESSAGES:
+            logger.warning(f"درخواست تکراری با update_id: {update_id} - نادیده گرفته شد")
+            return {"status": "ok"}
+        PROCESSED_MESSAGES.add(update_id)
     asyncio.create_task(application.process_update(update_obj))
     return {"status": "ok"}
 
 @app.get("/")
 async def root():
-    return {"message": "AI Chat Bot is running!"}
+    """نقطه ورود پایه برای بررسی سرور"""
+    return {"message": "Bot is running!"}
 
-# Start command
+def clean_text(text):
+    """پاک‌سازی متن از تبلیغات و کاراکترهای غیرضروری"""
+    if not text:
+        return ""
+    text = text.replace("*", "").replace("`", "").replace("[", "").replace("]", "").replace("!", "!")
+    ad_texts = [
+        "Powered by Pollinations.AI free text APIs. Support our mission(https://pollinations.ai/redirect/kofi) to keep AI accessible for everyone.",
+        "توسط Pollinations.AI به صورت رایگان ارائه شده است. از مأموریت ما حمایت کنید(https://pollinations.ai/redirect/kofi) تا AI برای همه قابل دسترسی باشد."
+    ]
+    for ad_text in ad_texts:
+        if ad_text in text:
+            text = text.replace(ad_text, "").strip()
+    return text.strip()
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_name = update.effective_user.first_name
-    keyboard = [[InlineKeyboardButton("🤖 شروع چت با هوش مصنوعی", callback_data="chat_with_ai")]]
-    await update.message.reply_text(
-        f"سلام {user_name}! به ربات چت هوش مصنوعی خوش اومدی!",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+    """ارسال پیام خوش‌آمدگویی با گزینه چت با هوش مصنوعی"""
+    user_id = update.effective_user.id
+    if user_id in AI_CHAT_USERS:
+        AI_CHAT_USERS.remove(user_id)
+    context.user_data.clear()
+    user_name = update.message.from_user.first_name
+    welcome_message = clean_text(
+        f"سلام {user_name}!\nبه ربات خوش اومدی! 😊\n"
+        "می‌خوای با هوش مصنوعی گپ بزنی؟ دکمه زیر رو بزن! 🤖"
     )
+    keyboard = [
+        [InlineKeyboardButton("Chat with AI 🤖", callback_data="chat_with_ai")]
+    ]
+    await update.message.reply_text(welcome_message, reply_markup=InlineKeyboardMarkup(keyboard))
 
-# AI Chat button callback
 async def chat_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """فعال‌سازی حالت چت با هوش مصنوعی"""
     query = update.callback_query
     await query.answer()
-    user_id = query.from_user.id
+    user_id = update.effective_user.id
     AI_CHAT_USERS.add(user_id)
     context.user_data.clear()
     context.user_data["mode"] = "ai_chat"
     context.user_data["chat_history"] = []
-    keyboard = [[InlineKeyboardButton("🏠 بازگشت به خانه", callback_data="back_to_home")]]
+    keyboard = [[InlineKeyboardButton("🏠 Back to Home", callback_data="back_to_home")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        "🤖 چت با هوش مصنوعی فعال شد! هر چی می‌خوای بپرس، من هستم!",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        clean_text("🤖 چت با هوش مصنوعی فعال شد!\n\nهر چی می‌خوای بگو، من یادم می‌مونه چی گفتی! 😎"),
+        reply_markup=reply_markup
     )
 
-# Button navigation
-async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    data = update.callback_query.data
-    if data == "chat_with_ai":
-        return await chat_with_ai(update, context)
-    elif data == "back_to_home":
-        return await start(update.callback_query, context)
-
-# Text message handler (private or group)
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت پیام‌های کاربر در حالت چت با هوش مصنوعی"""
     user_id = update.effective_user.id
-    message = update.message
-    text = message.text.lower()
-
-    trigger_words = ["سلام", "ربات", "پلاتو"]
-    should_reply = (
-        user_id in AI_CHAT_USERS or
-        message.chat.type != "private" and (
-            any(w in text for w in trigger_words) or message.reply_to_message and message.reply_to_message.from_user.id == context.bot.id
-        )
-    )
-
-    if not should_reply:
+    if user_id not in AI_CHAT_USERS or context.user_data.get("mode") != "ai_chat":
         return
 
+    message_id = update.message.message_id
+    with PROCESSING_LOCK:
+        if message_id in PROCESSED_MESSAGES:
+            logger.warning(f"پیام تکراری با message_id: {message_id} - نادیده گرفته شد")
+            return
+        PROCESSED_MESSAGES.add(message_id)
+
+    user_message = update.message.text
     chat_history = context.user_data.get("chat_history", [])
-    chat_history.append({"role": "user", "content": message.text})
+    chat_history.append({"role": "user", "content": user_message})
     context.user_data["chat_history"] = chat_history
 
     payload = {
-        "messages": [{"role": "system", "content": SYSTEM_MESSAGE}] + chat_history,
+        "messages": [
+            {"role": "system", "content": SYSTEM_MESSAGE}
+        ] + chat_history,
         "model": "openai-large",
         "seed": 42,
         "jsonMode": False
     }
 
+    keyboard = [[InlineKeyboardButton("🏠 Back to Home", callback_data="back_to_home")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     try:
         response = requests.post(TEXT_API_URL, json=payload, timeout=20)
         if response.status_code == 200:
-            ai_response = response.text.strip()
+            ai_response = clean_text(response.text.strip())
             chat_history.append({"role": "assistant", "content": ai_response})
             context.user_data["chat_history"] = chat_history
-            await message.reply_text(ai_response, reply_to_message_id=message.message_id)
+            await update.message.reply_text(ai_response, reply_markup=reply_markup)
         else:
-            await message.reply_text("خطایی رخ داد! بعداً امتحان کن.", reply_to_message_id=message.message_id)
+            await update.message.reply_text(
+                clean_text("اوفف، یه مشکلی پیش اومد! 😅 فکر کنم API یه کم خوابش برده! بعداً امتحان کن 🚀"),
+                reply_markup=reply_markup
+            )
     except Exception as e:
-        logger.error(f"AI error: {e}")
-        await message.reply_text("یه مشکلی پیش اومد. بعداً دوباره امتحان کن!", reply_to_message_id=message.message_id)
+        logger.error(f"خطا در اتصال به API چت: {e}")
+        await update.message.reply_text(
+            clean_text("اییی، یه خطا خوردم! 😭 بعداً دوباره بیا، قول می‌دم درستش کنم! 🚀"),
+            reply_markup=reply_markup
+        )
 
-# Photo handler
-async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def back_to_home(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """بازگشت به منوی اصلی"""
+    query = update.callback_query
+    await query.answer()
     user_id = update.effective_user.id
-    if user_id not in AI_CHAT_USERS:
-        return
-
-    photo = update.message.photo[-1]
-    file = await photo.get_file()
-    file_path = tempfile.mktemp(suffix=".jpg")
-    await file.download_to_drive(file_path)
-
-    with open(file_path, "rb") as f:
-        encoded_image = base64.b64encode(f.read()).decode("utf-8")
-    os.remove(file_path)
-
-    prompt = "What is in this image?"
-    payload = {
-        "messages": [
-            {"role": "system", "content": SYSTEM_MESSAGE},
-            {"role": "user", "content": prompt}
-        ],
-        "image": encoded_image,
-        "model": "openai-large",
-        "jsonMode": False
-    }
-
+    if user_id in AI_CHAT_USERS:
+        AI_CHAT_USERS.remove(user_id)
+    context.user_data.clear()
+    user_name = query.from_user.first_name
+    welcome_message = clean_text(
+        f"سلام {user_name}!\nبه ربات خوش اومدی! 😊\n"
+        "می‌خوای با هوش مصنوعی گپ بزنی؟ دکمه زیر رو بزن! 🤖"
+    )
+    keyboard = [
+        [InlineKeyboardButton("Chat with AI 🤖", callback_data="chat_with_ai")]
+    ]
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=welcome_message,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
     try:
-        response = requests.post(TEXT_API_URL, json=payload, timeout=30)
-        if response.status_code == 200:
-            result = response.text.strip()
-            await update.message.reply_text(f"تجزیه و تحلیل تصویر:\n{result}", reply_to_message_id=update.message.message_id)
-        else:
-            await update.message.reply_text("نتونستم عکسو بررسی کنم.", reply_to_message_id=update.message.message_id)
+        await query.message.delete()
     except Exception as e:
-        logger.error(f"Image analysis error: {e}")
-        await update.message.reply_text("یه مشکلی پیش اومد موقع بررسی عکس.", reply_to_message_id=update.message.message_id)
+        logger.error(f"خطا در حذف پیام قبلی: {e}")
 
-# Register handlers
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CallbackQueryHandler(callback_router, pattern=".*"))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-application.add_handler(MessageHandler(filters.PHOTO, handle_image))
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت خطاها"""
+    logger.error(f"خطا رخ داد: {context.error}")
+    if update and update.message:
+        await update.message.reply_text(clean_text("یه مشکلی پیش اومد! 😅 دوباره امتحان کن!"))
 
-# Webhook setup + FastAPI startup
+async def main():
+    """راه‌اندازی ربات با وب‌هوک و سرور FastAPI"""
+    global application
+    try:
+        # ساخت اپلیکیشن با توکن
+        application = Application.builder().token(TOKEN).read_timeout(60).write_timeout(60).connect_timeout(60).build()
+
+        # تنظیم وب‌هوک
+        await application.bot.set_webhook(url=WEBHOOK_URL)
+        logger.info(f"Webhook روی {WEBHOOK_URL} تنظیم شد.")
+
+        # اضافه کردن هندلرها
+        application.add_handler(CommandHandler("start", start, filters=filters.ChatType.PRIVATE))
+        application.add_handler(CallbackQueryHandler(chat_with_ai, pattern="^chat_with_ai$"))
+        application.add_handler(CallbackQueryHandler(back_to_home, pattern="^back_to_home$"))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_ai_message))
+        application.add_handler(error_handler)
+
+        # شروع ربات
+        logger.info("در حال آماده‌سازی ربات...")
+        await application.initialize()
+        logger.info("در حال شروع ربات...")
+        await application.start()
+
+        # راه‌اندازی سرور FastAPI
+        config = uvicorn.Config(app, host="0.0.0.0", port=8000)
+        server = uvicorn.Server(config)
+        await server.serve()
+
+    except Exception as e:
+        logger.error(f"خطا در راه‌اندازی ربات: {e}")
+        raise
+
 if __name__ == "__main__":
-    async def main():
-        bot = Bot(token=TOKEN)
-        await bot.set_webhook(url=WEBHOOK_URL)
-        print("Webhook set successfully.")
-
     asyncio.run(main())
-    uvicorn.run("main:app", host="0.0.0.0")
-            
