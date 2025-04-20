@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 TOKEN = '8123059269:AAHlvWT2ZZ3iC1ICRkmiuwTjBHvdM-NLy18'
 WEBHOOK_URL = 'https://medical-assistant-rum5.onrender.com/webhook'
 
-# آدرس API متنی
-TEXT_API_URL = 'https://text.pollinations.ai/'
+# آدرس API متنی و تحلیل تصویر
+TEXT_API_URL = 'https://text.pollinations.ai/openai'
 
 # شناسه کانال
 CHANNEL_ID = '@bbbyyyrt'
@@ -27,6 +27,7 @@ CHANNEL_ID = '@bbbyyyrt'
 SYSTEM_MESSAGE = (
     "شما دستیار هوشمند هستید و به صورت خودمونی، جذاب و با ایموجی حرف می‌زنید! 😎 "
     "به سبک نسل Z و با کمی طنز پاسخ بده و کاربر رو سرگرم کن. 🚀 "
+    "اگر تصویر دریافت کردی، محتوای اون رو به صورت خلاصه و باحال توصیف کن. "
     "به سوالات کاربر خلاصه و دقیق جواب بده، مگر اینکه بخواد توضیح بیشتر بشنوه."
 )
 
@@ -106,7 +107,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     welcome_message = clean_text(
         f"سلام {user_name}!\nبه ربات خوش اومدی! 😊\n"
-        "می‌خوای با هوش مصنوعی گپ بزنی؟ دکمه زیر رو بزن! 🤖"
+        "می‌خوای با هوش مصنوعی گپ بزنی یا عکس بفرستی تا آنالیز کنم؟ دکمه زیر رو بزن! 🤖"
     )
     keyboard = [
         [InlineKeyboardButton("Chat with AI 🤖", callback_data="chat_with_ai")]
@@ -135,7 +136,7 @@ async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     welcome_message = clean_text(
         f"آفرین {user_name}! حالا که تو کانال عضوی، ربات برات فعال شد! 😎\n"
-        "می‌خوای با هوش مصنوعی گپ بزنی؟ دکمه زیر رو بزن! 🤖"
+        "می‌خوای با هوش مصنوعی گپ بزنی یا عکس بفرستی تا آنالیز کنم؟ 🤖"
     )
     keyboard = [
         [InlineKeyboardButton("Chat with AI 🤖", callback_data="chat_with_ai")]
@@ -154,7 +155,7 @@ async def chat_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("🏠 Back to Home", callback_data="back_to_home")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        clean_text("🤖 چت با هوش مصنوعی فعال شد!\n\nهر چی می‌خوای بگو! 😎"),
+        clean_text("🤖 چت با هوش مصنوعی فعال شد!\n\nهر چی می‌خوای بگو یا یه عکس بفرست تا آنالیز کنم! 😎"),
         reply_markup=reply_markup
     )
 
@@ -177,12 +178,13 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["chat_history"] = chat_history
 
     payload = {
+        "model": "openai",
         "messages": [
             {"role": "system", "content": SYSTEM_MESSAGE}
         ] + chat_history,
-        "model": "openai-large",
+        "max_tokens": 300,
         "seed": 42,
-        "jsonMode": False
+        "json_mode": False
     }
 
     keyboard = [[InlineKeyboardButton("🏠 Back to Home", callback_data="back_to_home")]]
@@ -208,7 +210,7 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت عکس‌های ارسالی"""
+    """مدیریت عکس‌های ارسالی و تحلیل با API Pollinations"""
     user_id = update.effective_user.id
     if user_id not in AI_CHAT_USERS or context.user_data.get("mode") != "ai_chat":
         return
@@ -223,10 +225,51 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("🏠 Back to Home", callback_data="back_to_home")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(
-        clean_text("اوپس! 😅 در حال حاضر نمی‌تونم عکس رو ببینم یا توصیف کنم! API فعلی فقط برای چت متنیه. 🚀 یه پیام متنی بفرست تا بتونم باهات گپ بزنم! 😎"),
-        reply_markup=reply_markup
-    )
+    # دریافت عکس با بالاترین کیفیت
+    photo = update.message.photo[-1]
+    file = await context.bot.get_file(photo.file_id)
+    file_url = file.file_path
+
+    # آماده‌سازی پیام برای تحلیل تصویر
+    chat_history = context.user_data.get("chat_history", [])
+    image_message = {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "این عکس چیه؟ به صورت خودمونی و با ایموجی توصیفش کن! 😎"},
+            {"type": "image_url", "image_url": {"url": file_url}}
+        ]
+    }
+    chat_history.append(image_message)
+    context.user_data["chat_history"] = chat_history
+
+    payload = {
+        "model": "openai",
+        "messages": [
+            {"role": "system", "content": SYSTEM_MESSAGE}
+        ] + chat_history,
+        "max_tokens": 300,
+        "seed": 42,
+        "json_mode": False
+    }
+
+    try:
+        response = requests.post(TEXT_API_URL, json=payload, timeout=20)
+        if response.status_code == 200:
+            ai_response = clean_text(response.text.strip())
+            chat_history.append({"role": "assistant", "content": ai_response})
+            context.user_data["chat_history"] = chat_history
+            await update.message.reply_text(ai_response, reply_markup=reply_markup)
+        else:
+            await update.message.reply_text(
+                clean_text("اوفف، API یه کم قاطی کرد! 😅 دوباره عکس بفرست! 🚀"),
+                reply_markup=reply_markup
+            )
+    except Exception as e:
+        logger.error(f"خطا در تحلیل تصویر: {e}")
+        await update.message.reply_text(
+            clean_text("اییی، یه خطا تو تحلیل عکس پیش اومد! 😭 دوباره بفرست! 🚀"),
+            reply_markup=reply_markup
+        )
 
 async def back_to_home(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """بازگشت به منوی اصلی"""
@@ -239,7 +282,7 @@ async def back_to_home(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = query.from_user.first_name
     welcome_message = clean_text(
         f"سلام {user_name}!\nبه ربات خوش اومدی! 😊\n"
-        "می‌خوای با هوش مصنوعی گپ بزنی؟ دکمه زیر رو بزن! 🤖"
+        "می‌خوای با هوش مصنوعی گپ بزنی یا عکس بفرستی تا آنالیز کنم؟ دکمه زیر رو بزن! 🤖"
     )
     keyboard = [
         [InlineKeyboardButton("Chat with AI 🤖", callback_data="chat_with_ai")]
