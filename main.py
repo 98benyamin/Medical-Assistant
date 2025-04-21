@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import Response
 import uvicorn
 from threading import Lock
+import uuid
 
 # تنظیم لاگ
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -22,9 +23,10 @@ WEBHOOK_URL = 'https://medical-assistant-rum5.onrender.com/webhook'
 # آدرس API متنی و تحلیل تصویر
 TEXT_API_URL = 'https://text.pollinations.ai/openai'
 
-# شناسه کانال
+# شناسه کانال و ادمین
 CHANNEL_ID = '@bbbyyyrt'
 CHANNEL_LINK = 'https://t.me/bbbyyyrt'
+ADMIN_ID = 6753257929
 
 # پیام سیستمی مرکزی
 CENTRAL_SYSTEM_MESSAGE = """
@@ -330,6 +332,9 @@ AI_CHAT_USERS = set()
 PROCESSING_LOCK = Lock()
 PROCESSED_MESSAGES = set()
 
+# دیکشنری برای ذخیره موقت پیام‌های پشتیبانی
+SUPPORT_MESSAGES = {}  # ساختار: {support_id: {"user_id": int, "user_message_id": int, "admin_message_id": int}}
+
 application = None
 
 app = FastAPI()
@@ -412,7 +417,7 @@ MAIN_MENU_KEYBOARD = ReplyKeyboardMarkup([
     ["راهنما ⁉️", "پشتیبانی 💬"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
-# تعریف زیرمنوی جعبه ابزار پزشکی با ایموجی در سمت راست و دکمه جدید
+# تعریف زیرمنوی جعبه ابزار پزشکی با ایموجی در سمت راست
 TOOLBOX_MENU_KEYBOARD = ReplyKeyboardMarkup([
     ["بررسی آزمایش 🧪", "تحلیل نوار قلب 📈"],
     ["تفسیر رادیولوژی 🩻", "تشخیص علائم 🧫"],
@@ -422,6 +427,11 @@ TOOLBOX_MENU_KEYBOARD = ReplyKeyboardMarkup([
 
 # تعریف منوی زیر دکمه‌ها با دکمه بازگشت و ایموجی در سمت راست
 SUB_MENU_KEYBOARD = ReplyKeyboardMarkup([
+    ["بازگشت 🔙"]
+], resize_keyboard=True, one_time_keyboard=False)
+
+# منوی پشتیبانی
+SUPPORT_KEYBOARD = ReplyKeyboardMarkup([
     ["بازگشت 🔙"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
@@ -504,13 +514,347 @@ async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     welcome_message = clean_text(
         f"آفرین {user_name}! حالا که تو کانال عضوی، *دستیار پزشکی* برات فعال شد! 🩺\n"
-        "یکی از گزینه‌های زیر رو انتخاب کن:"
+        "یکی از گزینه‌ها رو انتخاب کن:"
     )
     await query.edit_message_text(
         welcome_message,
         reply_markup=MAIN_MENU_KEYBOARD,
         parse_mode="Markdown"
     )
+
+async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت پیام‌های متنی ارسالی در حالت پشتیبانی"""
+    user_id = update.effective_user.id
+    message_text = update.message.text
+    message_id = update.message.message_id
+
+    if message_text == "بازگشت 🔙":
+        if user_id in AI_CHAT_USERS:
+            AI_CHAT_USERS.remove(user_id)
+        context.user_data.clear()
+        await update.message.reply_text(
+            clean_text("به *منوی اصلی* برگشتی! 😊 یکی از گزینه‌ها رو انتخاب کن:"),
+            reply_markup=MAIN_MENU_KEYBOARD,
+            parse_mode="Markdown"
+        )
+        return
+
+    # بررسی عضویت در کانال
+    is_member = await check_channel_membership(context.bot, user_id)
+    if not is_member:
+        welcome_message = clean_text(
+            "اوپس! 😅 برای استفاده از ربات باید تو کانال عضو بشی!\n"
+            "لطفاً تو کانال عضو شو و بعد دکمه *عضو شدم* رو بزن! 🚑"
+        )
+        keyboard = [
+            [InlineKeyboardButton("عضو کانال شو 📢", url=CHANNEL_LINK)],
+            [InlineKeyboardButton("عضو شدم! ✅", callback_data="check_membership")]
+        ]
+        await update.message.reply_text(
+            welcome_message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+        return
+
+    # بررسی محدودیت نرخ درخواست‌ها
+    if not await check_rate_limit(context, user_id):
+        await update.message.reply_text(
+            clean_text("لطفاً چند لحظه صبر کن! 😊 تعداد درخواست‌هات زیاد شده."),
+            reply_markup=SUPPORT_KEYBOARD,
+            parse_mode="Markdown"
+        )
+        return
+
+    # تولید شناسه منحصربه‌فرد برای پیام پشتیبانی
+    support_id = str(uuid.uuid4())
+
+    # ارسال پیام به ادمین
+    admin_message = await context.bot.send_message(
+        chat_id=ADMIN_ID,
+        text=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{message_text}"),
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
+        ]),
+        protect_content=True
+    )
+
+    # ذخیره اطلاعات پیام پشتیبانی
+    SUPPORT_MESSAGES[support_id] = {
+        "user_id": user_id,
+        "user_message_id": message_id,
+        "admin_message_id": admin_message.message_id
+    }
+
+    # اطلاع به کاربر
+    await update.message.reply_text(
+        clean_text("پیام شما ارسال شد. به زودی پاسخ از طریق ادمین ارسال می‌شود. 😊"),
+        reply_markup=SUPPORT_KEYBOARD,
+        parse_mode="Markdown"
+    )
+
+async def handle_support_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت عکس‌های ارسالی در حالت پشتیبانی"""
+    user_id = update.effective_user.id
+    message_id = update.message.message_id
+    photo = update.message.photo[-1]
+    caption = update.message.caption or "بدون کپشن"
+
+    # بررسی عضویت در کانال
+    is_member = await check_channel_membership(context.bot, user_id)
+    if not is_member:
+        welcome_message = clean_text(
+            "اوپس! 😅 برای استفاده از ربات باید تو کانال عضو بشی!\n"
+            "لطفاً تو کانال عضو شو و بعد دکمه *عضو شدم* رو بزن! 🚑"
+        )
+        keyboard = [
+            [InlineKeyboardButton("عضو کانال شو 📢", url=CHANNEL_LINK)],
+            [InlineKeyboardButton("عضو شدم! ✅", callback_data="check_membership")]
+        ]
+        await update.message.reply_text(
+            welcome_message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+        return
+
+    # بررسی محدودیت نرخ درخواست‌ها
+    if not await check_rate_limit(context, user_id):
+        await update.message.reply_text(
+            clean_text("لطفاً چند لحظه صبر کن! 😊 تعداد درخواست‌هات زیاد شده."),
+            reply_markup=SUPPORT_KEYBOARD,
+            parse_mode="Markdown"
+        )
+        return
+
+    # تولید شناسه منحصربه‌فرد برای پیام پشتیبانی
+    support_id = str(uuid.uuid4())
+
+    # ارسال عکس به ادمین
+    admin_message = await context.bot.send_photo(
+        chat_id=ADMIN_ID,
+        photo=photo.file_id,
+        caption=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{caption}"),
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
+        ]),
+        protect_content=True
+    )
+
+    # ذخیره اطلاعات پیام پشتیبانی
+    SUPPORT_MESSAGES[support_id] = {
+        "user_id": user_id,
+        "user_message_id": message_id,
+        "admin_message_id": admin_message.message_id
+    }
+
+    # اطلاع به کاربر
+    await update.message.reply_text(
+        clean_text("پیام شما ارسال شد. به زودی پاسخ از طریق ادمین ارسال می‌شود. 😊"),
+        reply_markup=SUPPORT_KEYBOARD,
+        parse_mode="Markdown"
+    )
+
+async def handle_support_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت ویدیوهای ارسالی در حالت پشتیبانی"""
+    user_id = update.effective_user.id
+    message_id = update.message.message_id
+    video = update.message.video
+    caption = update.message.caption or "بدون کپشن"
+
+    # بررسی عضویت در کانال
+    is_member = await check_channel_membership(context.bot, user_id)
+    if not is_member:
+        welcome_message = clean_text(
+            "اوپس! 😅 برای استفاده از ربات باید تو کانال عضو بشی!\n"
+            "لطفاً تو کانال عضو شو و بعد دکمه *عضو شدم* رو بزن! 🚑"
+        )
+        keyboard = [
+            [InlineKeyboardButton("عضو کانال شو 📢", url=CHANNEL_LINK)],
+            [InlineKeyboardButton("عضو شدم! ✅", callback_data="check_membership")]
+        ]
+        await update.message.reply_text(
+            welcome_message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+        return
+
+    # بررسی محدودیت نرخ درخواست‌ها
+    if not await check_rate_limit(context, user_id):
+        await update.message.reply_text(
+            clean_text("لطفاً چند لحظه صبر کن! 😊 تعداد درخواست‌هات زیاد شده."),
+            reply_markup=SUPPORT_KEYBOARD,
+            parse_mode="Markdown"
+        )
+        return
+
+    # تولید شناسه منحصربه‌فرد برای پیام پشتیبانی
+    support_id = str(uuid.uuid4())
+
+    # ارسال ویدیو به ادمین
+    admin_message = await context.bot.send_video(
+        chat_id=ADMIN_ID,
+        video=video.file_id,
+        caption=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{caption}"),
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
+        ]),
+        protect_content=True
+    )
+
+    # ذخیره اطلاعات پیام پشتیبانی
+    SUPPORT_MESSAGES[support_id] = {
+        "user_id": user_id,
+        "user_message_id": message_id,
+        "admin_message_id": admin_message.message_id
+    }
+
+    # اطلاع به کاربر
+    await update.message.reply_text(
+        clean_text("پیام شما ارسال شد. به زودی پاسخ از طریق ادمین ارسال می‌شود. 😊"),
+        reply_markup=SUPPORT_KEYBOARD,
+        parse_mode="Markdown"
+    )
+
+async def handle_support_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت فایل‌های ارسالی در حالت پشتیبانی"""
+    user_id = update.effective_user.id
+    message_id = update.message.message_id
+    document = update.message.document
+    caption = update.message.caption or "بدون کپشن"
+
+    # بررسی عضویت در کانال
+    is_member = await check_channel_membership(context.bot, user_id)
+    if not is_member:
+        welcome_message = clean_text(
+            "اوپس! 😅 برای استفاده از ربات باید تو کانال عضو بشی!\n"
+            "لطفاً تو کانال عضو شو و بعد دکمه *عضو شدم* رو بزن! 🚑"
+        )
+        keyboard = [
+            [InlineKeyboardButton("عضو کانال شو 📢", url=CHANNEL_LINK)],
+            [InlineKeyboardButton("عضو شدم! ✅", callback_data="check_membership")]
+        ]
+        await update.message.reply_text(
+            welcome_message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+        return
+
+    # بررسی محدودیت نرخ درخواست‌ها
+    if not await check_rate_limit(context, user_id):
+        await update.message.reply_text(
+            clean_text("لطفاً چند لحظه صبر کن! 😊 تعداد درخواست‌هات زیاد شده."),
+            reply_markup=SUPPORT_KEYBOARD,
+            parse_mode="Markdown"
+        )
+        return
+
+    # تولید شناسه منحصربه‌فرد برای پیام پشتیبانی
+    support_id = str(uuid.uuid4())
+
+    # ارسال فایل به ادمین
+    admin_message = await context.bot.send_document(
+        chat_id=ADMIN_ID,
+        document=document.file_id,
+        caption=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{caption}"),
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
+        ]),
+        protect_content=True
+    )
+
+    # ذخیره اطلاعات پیام پشتیبانی
+    SUPPORT_MESSAGES[support_id] = {
+        "user_id": user_id,
+        "user_message_id": message_id,
+        "admin_message_id": admin_message.message_id
+    }
+
+    # اطلاع به کاربر
+    await update.message.reply_text(
+        clean_text("پیام شما ارسال شد. به زودی پاسخ از طریق ادمین ارسال می‌شود. 😊"),
+        reply_markup=SUPPORT_KEYBOARD,
+        parse_mode="Markdown"
+    )
+
+async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت کلیک روی دکمه‌های اینلاین"""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data == "check_membership":
+        await check_membership(update, context)
+    elif data.startswith("reply_"):
+        support_id = data.split("_")[1]
+        if support_id in SUPPORT_MESSAGES:
+            user_id = SUPPORT_MESSAGES[support_id]["user_id"]
+            context.user_data["support_id"] = support_id
+            context.user_data["mode"] = "admin_reply"
+            await query.message.reply_text(
+                clean_text(f"لطفاً پاسخ خود را برای کاربر {user_id} وارد کنید:"),
+                parse_mode="Markdown"
+            )
+        else:
+            await query.message.reply_text(
+                clean_text("این پیام پشتیبانی دیگر معتبر نیست! 😊"),
+                parse_mode="Markdown"
+            )
+
+async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت پاسخ ادمین به پیام پشتیبانی"""
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        return
+
+    if context.user_data.get("mode") != "admin_reply" or "support_id" not in context.user_data:
+        return
+
+    support_id = context.user_data["support_id"]
+    if support_id not in SUPPORT_MESSAGES:
+        await update.message.reply_text(
+            clean_text("این پیام پشتیبانی دیگر معتبر نیست! 😊"),
+            parse_mode="Markdown"
+        )
+        return
+
+    support_info = SUPPORT_MESSAGES[support_id]
+    target_user_id = support_info["user_id"]
+    user_message_id = support_info["user_message_id"]
+    reply_text = update.message.text
+
+    # ارسال پاسخ به کاربر
+    try:
+        await context.bot.send_message(
+            chat_id=target_user_id,
+            text=clean_text(f"پاسخ ادمین:\n\n{reply_text}"),
+            reply_to_message_id=user_message_id,
+            parse_mode="Markdown",
+            protect_content=True
+        )
+    except TelegramError as e:
+        logger.error(f"خطا در ارسال پاسخ به کاربر {target_user_id}: {e}")
+        await update.message.reply_text(
+            clean_text("خطا در ارسال پاسخ به کاربر! 😔 لطفاً دوباره امتحان کنید."),
+            parse_mode="Markdown"
+        )
+        return
+
+    # اطلاع به ادمین
+    await update.message.reply_text(
+        clean_text("پاسخ شما با موفقیت به کاربر ارسال شد! 😊"),
+        parse_mode="Markdown"
+    )
+
+    # حذف پیام پشتیبانی از دیکشنری
+    del SUPPORT_MESSAGES[support_id]
+    context.user_data.clear()
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت پیام‌های متنی کاربر"""
@@ -697,7 +1041,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif message_text == "راهنما ⁉️":
         guide_message = clean_text(
-            "📖 *راهවිත් *راهنمای استفاده از دستیار پزشکی*:\n\n"
+            "📖 *راهنمای استفاده از دستیار پزشکی*:\n\n"
             "- **مشاوره پزشکی 🩺**: درباره بیماری‌ها یا علائم سؤال کن.\n"
             "- **سلامت روان 🧠**: درباره استرس یا روحیات بگو.\n"
             "- **سلامت دهان و دندان 🦷**: تصویر دندان یا علائم بفرست.\n"
@@ -709,7 +1053,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "  - *شناسایی داروها 💊*: تصویر قرص یا سؤال دارویی بفرست.\n"
             "  - *مراقبت از زخم 🩹*: تصویر زخم یا علائم بفرست.\n"
             "  - *شاخص توده بدنی 🎚*: قد و وزن رو بگو تا BMI محاسبه بشه.\n"
-            "- **پشتیبانی 💬**: برای سؤالات دیگه با ما تماس بگیر.\n\n"
+            "- **پشتیبانی 💬**: برای سؤالات دیگه، متن، عکس، ویدیو یا فایل بفرست.\n\n"
             "*همیشه برای تشخیص یا درمان با پزشک مشورت کن!* 🩺\n"
             "سؤالی داری؟ یکی از گزینه‌ها رو انتخاب کن! 😊"
         )
@@ -719,22 +1063,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
     elif message_text == "پشتیبانی 💬":
+        AI_CHAT_USERS.add(user_id)
+        context.user_data.clear()
+        context.user_data["mode"] = "support"
         await update.message.reply_text(
             clean_text(
                 "💬 *پشتیبانی دستیار پزشکی*\n\n"
-                "اگه سؤال یا مشکلی داری، با ادمین تماس بگیر: @SupportAdmin\n"
-                "یا دوباره یکی از گزینه‌های منو رو انتخاب کن! 😊"
+                "سؤالت رو بنویس یا عکس، ویدیو و فایل بفرست! 😊\n"
+                "ما به‌زودی جوابت رو می‌دیم."
             ),
-            reply_markup=MAIN_MENU_KEYBOARD,
-            parse_mode="Markdown"
-        )
-    elif message_text == "بازگشت 🔙":
-        if user_id in AI_CHAT_USERS:
-            AI_CHAT_USERS.remove(user_id)
-        context.user_data.clear()
-        await update.message.reply_text(
-            clean_text("به *منوی اصلی* برگشتی! 😊 یکی از گزینه‌ها رو انتخاب کن:"),
-            reply_markup=MAIN_MENU_KEYBOARD,
+            reply_markup=SUPPORT_KEYBOARD,
             parse_mode="Markdown"
         )
     elif user_id in AI_CHAT_USERS and context.user_data.get("mode") in SYSTEM_MESSAGES.keys():
@@ -814,106 +1152,154 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت عکس‌های ارسالی و تحلیل با API Pollinations"""
+    """مدیریت عکس‌های ارسالی"""
     user_id = update.effective_user.id
-    if user_id not in AI_CHAT_USERS or context.user_data.get("mode") not in SYSTEM_MESSAGES.keys():
+    mode = context.user_data.get("mode")
+
+    if mode == "support":
+        await handle_support_photo(update, context)
+    elif user_id in AI_CHAT_USERS and mode in SYSTEM_MESSAGES.keys():
+        # بررسی محدودیت نرخ درخواست‌ها
+        if not await check_rate_limit(context, user_id):
+            await update.message.reply_text(
+                clean_text("لطفاً چند لحظه صبر کن! 😊 تعداد درخواست‌هات زیاد شده."),
+                reply_markup=MAIN_MENU_KEYBOARD,
+                parse_mode="Markdown"
+            )
+            return
+
+        message_id = update.message.message_id
+        with PROCESSING_LOCK:
+            if message_id in PROCESSED_MESSAGES:
+                logger.warning(f"پیام تکراری با message_id: {message_id} - نادیده گرفته شد")
+                return
+            PROCESSED_MESSAGES.add(message_id)
+
+        chat_id = update.message.chat_id
+        temp_message = await update.message.reply_text("🔬", parse_mode="Markdown")
+
+        photo = update.message.photo[-1]
+        file = await context.bot.get_file(photo.file_id)
+        file_url = file.file_path
+
+        caption = update.message.caption if update.message.caption else "این تصویر چیه؟ به‌صورت خلاصه و دقیق تحلیل کن! 🩺"
+
+        chat_history = context.user_data.get("chat_history", [])
+        image_message = {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": caption},
+                {"type": "image_url", "image_url": {"url": file_url}}
+            ]
+        }
+        chat_history.append(image_message)
+        context.user_data["chat_history"] = chat_history
+
+        # انتخاب پرامپ سیستمی بر اساس mode
+        system_message = SYSTEM_MESSAGES[mode]
+
+        payload = {
+            "model": "openai-large",
+            "messages": [
+                {"role": "system", "content": system_message}
+            ] + chat_history,
+            "max_tokens": 300,
+            "seed": 42,
+            "json_mode": False
+        }
+
+        # مکانیزم retry برای درخواست API
+        for attempt in range(2):
+            try:
+                response = requests.post(TEXT_API_URL, json=payload, timeout=20)
+                try:
+                    await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
+                except TelegramError as e:
+                    logger.error(f"خطا در حذف پیام موقت: {e}")
+
+                if response.status_code == 200:
+                    response_data = response.json()
+                    ai_response = response_data.get("choices", [{}])[0].get("message", {}).get("content", "پاسخی دریافت نشد!")
+                    ai_response = clean_text(ai_response.strip())
+                    chat_history.append({"role": "assistant", "content": ai_response})
+                    context.user_data["chat_history"] = chat_history
+                    await update.message.reply_text(
+                        ai_response,
+                        reply_markup=SUB_MENU_KEYBOARD,
+                        parse_mode="Markdown"
+                    )
+                    break
+                else:
+                    await update.message.reply_text(
+                        clean_text("اوه، *دستگاه تحلیل‌مون* نیاز به تنظیم داره! 💉 لطفاً دوباره عکس رو بفرست. 🩻"),
+                        reply_markup=SUB_MENU_KEYBOARD,
+                        parse_mode="Markdown"
+                    )
+                    break
+            except requests.exceptions.RequestException as e:
+                logger.error(f"خطا در تحلیل تصویر (تلاش {attempt + 1}): {e}")
+                if attempt == 1:
+                    try:
+                        await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
+                    except TelegramError as e:
+                        logger.error(f"خطا در حذف پیام موقت: {e}")
+                    await update.message.reply_text(
+                        clean_text("اوپس، *اسکنر پزشکی‌مون* یه لحظه خاموش شد! 🩺 لطفاً دوباره عکس رو بفرست. 😊"),
+                        reply_markup=SUB_MENU_KEYBOARD,
+                        parse_mode="Markdown"
+                    )
+    else:
         await update.message.reply_text(
             clean_text("لطفاً برای تحلیل تصویر، گزینه مرتبط رو از *منو* انتخاب کن! 😊"),
             reply_markup=MAIN_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
-        return
 
-    # بررسی محدودیت نرخ درخواست‌ها
-    if not await check_rate_limit(context, user_id):
+async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت ویدیوهای ارسالی"""
+    user_id = update.effective_user.id
+    mode = context.user_data.get("mode")
+
+    if mode == "support":
+        await handle_support_video(update, context)
+    else:
         await update.message.reply_text(
-            clean_text("لطفاً چند لحظه صبر کن! 😊 تعداد درخواست‌هات زیاد شده."),
+            clean_text("ارسال ویدیو فقط در بخش *پشتیبانی 💬* ممکنه! 😊 لطفاً گزینه پشتیبانی رو انتخاب کن."),
             reply_markup=MAIN_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
-        return
 
-    message_id = update.message.message_id
-    with PROCESSING_LOCK:
-        if message_id in PROCESSED_MESSAGES:
-            logger.warning(f"پیام تکراری با message_id: {message_id} - نادیده گرفته شد")
-            return
-        PROCESSED_MESSAGES.add(message_id)
-
-    chat_id = update.message.chat_id
-    temp_message = await update.message.reply_text("🔬", parse_mode="Markdown")
-
-    photo = update.message.photo[-1]
-    file = await context.bot.get_file(photo.file_id)
-    file_url = file.file_path
-
-    caption = update.message.caption if update.message.caption else "این تصویر چیه؟ به‌صورت خلاصه و دقیق تحلیل کن! 🩺"
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت فایل‌های ارسالی"""
+    user_id = update.effective_user.id
     mode = context.user_data.get("mode")
 
-    chat_history = context.user_data.get("chat_history", [])
-    image_message = {
-        "role": "user",
-        "content": [
-            {"type": "text", "text": caption},
-            {"type": "image_url", "image_url": {"url": file_url}}
-        ]
-    }
-    chat_history.append(image_message)
-    context.user_data["chat_history"] = chat_history
+    if mode == "support":
+        await handle_support_document(update, context)
+    else:
+        await update.message.reply_text(
+            clean_text("ارسال فایل فقط در بخش *پشتیبانی 💬* ممکنه! 😊 لطفاً گزینه پشتیبانی رو انتخاب کن."),
+            reply_markup=MAIN_MENU_KEYBOARD,
+            parse_mode="Markdown"
+        )
 
-    # انتخاب پرامپ سیستمی بر اساس mode
-    system_message = SYSTEM_MESSAGES[mode]
+async def handle_forwarded_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """جلوگیری از پذیرش پیام‌های فورواردشده"""
+    user_id = update.effective_user.id
+    mode = context.user_data.get("mode")
 
-    payload = {
-        "model": "openai-large",
-        "messages": [
-            {"role": "system", "content": system_message}
-        ] + chat_history,
-        "max_tokens": 300,
-        "seed": 42,
-        "json_mode": False
-    }
-
-    # مکانیزم retry برای درخواست API
-    for attempt in range(2):
-        try:
-            response = requests.post(TEXT_API_URL, json=payload, timeout=20)
-            try:
-                await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
-            except TelegramError as e:
-                logger.error(f"خطا در حذف پیام موقت: {e}")
-
-            if response.status_code == 200:
-                response_data = response.json()
-                ai_response = response_data.get("choices", [{}])[0].get("message", {}).get("content", "پاسخی دریافت نشد!")
-                ai_response = clean_text(ai_response.strip())
-                chat_history.append({"role": "assistant", "content": ai_response})
-                context.user_data["chat_history"] = chat_history
-                await update.message.reply_text(
-                    ai_response,
-                    reply_markup=SUB_MENU_KEYBOARD,
-                    parse_mode="Markdown"
-                )
-                break
-            else:
-                await update.message.reply_text(
-                    clean_text("اوه، *دستگاه تحلیل‌مون* نیاز به تنظیم داره! 💉 لطفاً دوباره عکس رو بفرست. 🩻"),
-                    reply_markup=SUB_MENU_KEYBOARD,
-                    parse_mode="Markdown"
-                )
-                break
-        except requests.exceptions.RequestException as e:
-            logger.error(f"خطا در تحلیل تصویر (تلاش {attempt + 1}): {e}")
-            if attempt == 1:
-                try:
-                    await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
-                except TelegramError as e:
-                    logger.error(f"خطا در حذف پیام موقت: {e}")
-                await update.message.reply_text(
-                    clean_text("اوپس، *اسکنر پزشکی‌مون* یه لحظه خاموش شد! 🩺 لطفاً دوباره عکس رو بفرست. 😊"),
-                    reply_markup=SUB_MENU_KEYBOARD,
-                    parse_mode="Markdown"
-                )
+    if mode == "support":
+        await update.message.reply_text(
+            clean_text("ارسال پیام فورواردشده مجاز نیست! 😊 لطفاً پیام، عکس، ویدیو یا فایل خودت رو بفرست."),
+            reply_markup=SUPPORT_KEYBOARD,
+            parse_mode="Markdown"
+        )
+    else:
+        await update.message.reply_text(
+            clean_text("لطفاً یکی از گزینه‌های *منو* رو انتخاب کن! 😊"),
+            reply_markup=MAIN_MENU_KEYBOARD,
+            parse_mode="Markdown"
+        )
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت خطاها"""
@@ -947,9 +1333,13 @@ async def main():
         logger.info(f"Webhook روی {WEBHOOK_URL} تنظیم شد.")
 
         application.add_handler(CommandHandler("start", start, filters=filters.ChatType.PRIVATE))
-        application.add_handler(CallbackQueryHandler(check_membership, pattern="^check_membership$"))
+        application.add_handler(CallbackQueryHandler(handle_callback_query))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_message))
         application.add_handler(MessageHandler(filters.PHOTO & filters.ChatType.PRIVATE, handle_photo))
+        application.add_handler(MessageHandler(filters.VIDEO & filters.ChatType.PRIVATE, handle_video))
+        application.add_handler(MessageHandler(filters.Document.ALL & filters.ChatType.PRIVATE, handle_document))
+        application.add_handler(MessageHandler(filters.FORWARDED & filters.ChatType.PRIVATE, handle_forwarded_message))
+        application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE & filters.User(user_id=ADMIN_ID), handle_admin_reply))
         application.add_error_handler(error_handler)
 
         logger.info("در حال آماده‌سازی ربات...")
