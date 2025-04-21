@@ -956,6 +956,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     chat_id = update.message.chat_id
 
+    # نادیده گرفتن پیام‌های ادمین در حالت admin_reply
+    if user_id == ADMIN_ID and context.user_data.get("mode") == "admin_reply":
+        return
+
+    # مدیریت دکمه بازگشت در همه حالت‌ها
+    if message_text == "بازگشت 🔙":
+        if user_id in AI_CHAT_USERS:
+            AI_CHAT_USERS.remove(user_id)
+        context.user_data.clear()
+        await update.message.reply_text(
+            clean_text("به *منوی اصلی* برگشتی! 😊 یکی از گزینه‌ها رو انتخاب کن:"),
+            reply_markup=MAIN_MENU_KEYBOARD,
+            parse_mode="Markdown"
+        )
+        return
+
     # بررسی عضویت در کانال
     is_member = await check_channel_membership(context.bot, user_id)
     if not is_member:
@@ -1433,12 +1449,20 @@ async def main():
 
         application.add_handler(CommandHandler("start", start, filters=filters.ChatType.PRIVATE))
         application.add_handler(CallbackQueryHandler(handle_callback_query))
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_message))
+        # هندلر برای پیام‌های ادمین در حالت admin_reply
+        application.add_handler(MessageHandler(
+            filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE & filters.User(user_id=ADMIN_ID),
+            handle_admin_reply
+        ))
+        # هندلر عمومی برای پیام‌های متنی
+        application.add_handler(MessageHandler(
+            filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+            handle_message
+        ))
         application.add_handler(MessageHandler(filters.PHOTO & filters.ChatType.PRIVATE, handle_photo))
         application.add_handler(MessageHandler(filters.VIDEO & filters.ChatType.PRIVATE, handle_video))
         application.add_handler(MessageHandler(filters.Document.ALL & filters.ChatType.PRIVATE, handle_document))
         application.add_handler(MessageHandler(filters.FORWARDED & filters.ChatType.PRIVATE, handle_forwarded_message))
-        application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE & filters.User(user_id=ADMIN_ID), handle_admin_reply))
         application.add_error_handler(error_handler)
 
         logger.info("در حال آماده‌سازی ربات...")
