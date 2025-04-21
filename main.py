@@ -411,18 +411,18 @@ async def check_channel_membership(bot, user_id):
 
 # تعریف منوی اصلی با ایموجی‌ها در سمت راست
 MAIN_MENU_KEYBOARD = ReplyKeyboardMarkup([
-    ["🩺 مشاوره پزشکی "],
-    ["🧠 سلامت روان ", "🦷 سلامت دهان و دندان "],
-    ["🧰 جعبه ابزار پزشکی "],
-    ["⁉️ راهنما ", "💬 پشتیبانی "]
+    ["🩺 مشاوره پزشکی"],
+    ["🧠 سلامت روان", "🦷 سلامت دهان و دندان"],
+    ["🧰 جعبه ابزار پزشکی"],
+    ["⁉️ راهنما", "💬 پشتیبانی"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
 # تعریف زیرمنوی جعبه ابزار پزشکی با ایموجی‌ها در سمت راست
 TOOLBOX_MENU_KEYBOARD = ReplyKeyboardMarkup([
-    ["🧪 بررسی آزمایش ", "📈 تحلیل نوار قلب "],
-    ["🩻 تفسیر رادیولوژی ", "🧫 تشخیص علائم "],
-    ["💊 شناسایی داروها ", "🩹 مراقبت از زخم "],
-    ["🎚 شاخص توده بدنی ", "🔙 بازگشت "]
+    ["🧪 بررسی آزمایش", "📈 تحلیل نوار قلب"],
+    ["🩻 تفسیر رادیولوژی", "🧫 تشخیص علائم"],
+    ["💊 شناسایی داروها", "🩹 مراقبت از زخم"],
+    ["🎚 شاخص توده بدنی", "🔙 بازگشت"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
 # تعریف منوی زیر دکمه‌ها با ایموجی در سمت راست
@@ -1005,7 +1005,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # مدیریت دکمه‌های منوی اصلی
-    if message_text == "مشاوره پزشکی 🩺":
+    if message_text == "🩺 مشاوره پزشکی":
         AI_CHAT_USERS.add(user_id)
         context.user_data.clear()
         context.user_data["mode"] = "ai_chat"
@@ -1019,7 +1019,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
-    elif message_text == "سلامت روان 🧠":
+    elif message_text == "🧠 سلامت روان":
         AI_CHAT_USERS.add(user_id)
         context.user_data.clear()
         context.user_data["mode"] = "mental_health"
@@ -1033,7 +1033,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
-    elif message_text == "سلامت دهان و دندان 🦷":
+    elif message_text == "🦷 سلامت دهان و دندان":
         AI_CHAT_USERS.add(user_id)
         context.user_data.clear()
         context.user_data["mode"] = "dental_health"
@@ -1047,7 +1047,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
-    elif message_text == "جعبه ابزار پزشکی 🧰":
+    elif message_text == "🧰 جعبه ابزار پزشکی":
         await update.message.reply_text(
             clean_text(
                 "🧰 *جعبه ابزار پزشکی* باز شد!\n\n"
@@ -1056,7 +1056,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=TOOLBOX_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
-    elif message_text == "بررسی آزمایش 🧪":
+    elif message_text == "🧪 بررسی آزمایش":
         AI_CHAT_USERS.add(user_id)
         context.user_data.clear()
         context.user_data["mode"] = "lab_test"
@@ -1070,7 +1070,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
-    elif message_text == "تحلیل نوار قلب 📈":
+    elif message_text == "📈 تحلیل نوار قلب":
         AI_CHAT_USERS.add(user_id)
         context.user_data.clear()
         context.user_data["mode"] = "ecg"
@@ -1084,7 +1084,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
-    elif message_text == "تفسیر رادیولوژی 🩻":
+    elif message_text == "🩻 تفسیر رادیولوژی":
         AI_CHAT_USERS.add(user_id)
         context.user_data.clear()
         context.user_data["mode"] = "radiology"
@@ -1098,7 +1098,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
-    elif message_text == "تشخیص علائم 🧫":
+    elif message_text == "🧫 تشخیص علائم":
         AI_CHAT_USERS.add(user_id)
         context.user_data.clear()
         context.user_data["mode"] = "symptom_diagnosis"
@@ -1112,7 +1112,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
-    elif message_text == "شناسایی داروها 💊":
+    elif message_text == "💊 شناسایی داروها":
         AI_CHAT_USERS.add(user_id)
         context.user_data.clear()
         context.user_data["mode"] = "drug_identification"
@@ -1126,7 +1126,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
-    elif message_text == "مراقبت از زخم 🩹":
+    elif message_text == "🩹 مراقبت از زخم":
         AI_CHAT_USERS.add(user_id)
         context.user_data.clear()
         context.user_data["mode"] = "wound_care"
@@ -1140,7 +1140,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
-    elif message_text == "شاخص توده بدنی 🎚":
+    elif message_text == "🎚 شاخص توده بدنی":
         AI_CHAT_USERS.add(user_id)
         context.user_data.clear()
         context.user_data["mode"] = "bmi"
@@ -1154,7 +1154,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
-    elif message_text == "راهنما ⁉️":
+    elif message_text == "⁉️ راهنما":
         guide_message = clean_text(
             "📖 *راهنمای استفاده از دستیار پزشکی*:\n\n"
             "- **مشاوره پزشکی 🩺**: درباره بیماری‌ها یا علائم سؤال کن.\n"
@@ -1177,7 +1177,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=MAIN_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
-    elif message_text == "پشتیبانی 💬":
+    elif message_text == "💬 پشتیبانی":
         AI_CHAT_USERS.add(user_id)
         context.user_data.clear()
         context.user_data["mode"] = "support"
