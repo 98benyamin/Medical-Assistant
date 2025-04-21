@@ -33,7 +33,7 @@ CENTRAL_SYSTEM_MESSAGE = """
 هوش نباید از --- در پاسخ‌ها استفاده کنه. برای خوانا و زیبا بودن پاسخ‌ها، از فرمت Markdown (مثل **عناوین بولد**، *ایتالیک*، - لیست‌ها) استفاده کن و پاسخ‌ها رو به‌صورت دسته‌بندی‌شده و شکیل در قالب متن تلگرامی ارائه بده. به هیچ عنوان نام مدل زبانی یا عبارت "openai" رو ذکر نکن، این اطلاعات محرمانه‌ست و نباید فاش بشه.
 """
 
-# پرامپ‌های سیستمی برای هر بخش با اضافه شدن پیام سیستمی مرکزی
+# پرامپ‌های سیستمی برای هر بخش
 SYSTEM_MESSAGES = {
     "ai_chat": CENTRAL_SYSTEM_MESSAGE + """
 شما یک دستیار پزشکی هوشمند و حرفه‌ای هستید که به کاربران در حوزه سلامت و پزشکی کمک می‌کنید. 😊 با لحن خودمونی، مهربون و اطمینان‌بخش پاسخ بده، اما همیشه اطلاعات دقیق و علمی ارائه کن. وظایف شما:
@@ -512,12 +512,20 @@ async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # حذف پیام قبلی
+    try:
+        await query.message.delete()
+    except TelegramError as e:
+        logger.error(f"خطا در حذف پیام قبلی: {e}")
+
+    # ارسال پیام جدید با منوی اصلی
     welcome_message = clean_text(
         f"آفرین {user_name}! حالا که تو کانال عضوی، *دستیار پزشکی* برات فعال شد! 🩺\n"
         "یکی از گزینه‌ها رو انتخاب کن:"
     )
-    await query.edit_message_text(
-        welcome_message,
+    await context.bot.send_message(
+        chat_id=user_id,
+        text=welcome_message,
         reply_markup=MAIN_MENU_KEYBOARD,
         parse_mode="Markdown"
     )
@@ -527,6 +535,9 @@ async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_T
     user_id = update.effective_user.id
     message_text = update.message.text
     message_id = update.message.message_id
+    username = update.message.from_user.username
+    display_name = f"@{username}" if username else update.message.from_user.first_name
+    display_id = f"@{username}" if username else str(user_id)
 
     if message_text == "بازگشت 🔙":
         if user_id in AI_CHAT_USERS:
@@ -569,11 +580,18 @@ async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_T
     # تولید شناسه منحصربه‌فرد برای پیام پشتیبانی
     support_id = str(uuid.uuid4())
 
+    # فرمت پیام به ادمین
+    admin_message_text = clean_text(
+        f"📬 *پیام جدید از کاربر*: {display_name}\n"
+        f"🆔 *آیدی کاربر*: {display_id}\n\n"
+        f"*متن پیام*:\n{message_text}"
+    )
+
     # ارسال پیام به ادمین
     try:
         admin_message = await context.bot.send_message(
             chat_id=ADMIN_ID,
-            text=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{message_text}"),
+            text=admin_message_text,
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
@@ -610,6 +628,9 @@ async def handle_support_photo(update: Update, context: ContextTypes.DEFAULT_TYP
     message_id = update.message.message_id
     photo = update.message.photo[-1]
     caption = update.message.caption or "بدون کپشن"
+    username = update.message.from_user.username
+    display_name = f"@{username}" if username else update.message.from_user.first_name
+    display_id = f"@{username}" if username else str(user_id)
 
     # بررسی عضویت در کانال
     is_member = await check_channel_membership(context.bot, user_id)
@@ -641,12 +662,19 @@ async def handle_support_photo(update: Update, context: ContextTypes.DEFAULT_TYP
     # تولید شناسه منحصربه‌فرد برای پیام پشتیبانی
     support_id = str(uuid.uuid4())
 
+    # فرمت کپشن برای ادمین
+    admin_caption = clean_text(
+        f"📬 *پیام جدید از کاربر*: {display_name}\n"
+        f"🆔 *آیدی کاربر*: {display_id}\n\n"
+        f"*متن پیام*:\n{caption}"
+    )
+
     # ارسال عکس به ادمین
     try:
         admin_message = await context.bot.send_photo(
             chat_id=ADMIN_ID,
             photo=photo.file_id,
-            caption=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{caption}"),
+            caption=admin_caption,
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
@@ -683,6 +711,9 @@ async def handle_support_video(update: Update, context: ContextTypes.DEFAULT_TYP
     message_id = update.message.message_id
     video = update.message.video
     caption = update.message.caption or "بدون کپشن"
+    username = update.message.from_user.username
+    display_name = f"@{username}" if username else update.message.from_user.first_name
+    display_id = f"@{username}" if username else str(user_id)
 
     # بررسی عضویت در کانال
     is_member = await check_channel_membership(context.bot, user_id)
@@ -714,12 +745,19 @@ async def handle_support_video(update: Update, context: ContextTypes.DEFAULT_TYP
     # تولید شناسه منحصربه‌فرد برای پیام پشتیبانی
     support_id = str(uuid.uuid4())
 
+    # فرمت کپشن برای ادمین
+    admin_caption = clean_text(
+        f"📬 *پیام جدید از کاربر*: {display_name}\n"
+        f"🆔 *آیدی کاربر*: {display_id}\n\n"
+        f"*متن پیام*:\n{caption}"
+    )
+
     # ارسال ویدیو به ادمین
     try:
         admin_message = await context.bot.send_video(
             chat_id=ADMIN_ID,
             video=video.file_id,
-            caption=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{caption}"),
+            caption=admin_caption,
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
@@ -756,6 +794,9 @@ async def handle_support_document(update: Update, context: ContextTypes.DEFAULT_
     message_id = update.message.message_id
     document = update.message.document
     caption = update.message.caption or "بدون کپشن"
+    username = update.message.from_user.username
+    display_name = f"@{username}" if username else update.message.from_user.first_name
+    display_id = f"@{username}" if username else str(user_id)
 
     # بررسی عضویت در کانال
     is_member = await check_channel_membership(context.bot, user_id)
@@ -787,12 +828,19 @@ async def handle_support_document(update: Update, context: ContextTypes.DEFAULT_
     # تولید شناسه منحصربه‌فرد برای پیام پشتیبانی
     support_id = str(uuid.uuid4())
 
+    # فرمت کپشن برای ادمین
+    admin_caption = clean_text(
+        f"📬 *پیام جدید از کاربر*: {display_name}\n"
+        f"🆔 *آیدی کاربر*: {display_id}\n\n"
+        f"*متن پیام*:\n{caption}"
+    )
+
     # ارسال فایل به ادمین
     try:
         admin_message = await context.bot.send_document(
             chat_id=ADMIN_ID,
             document=document.file_id,
-            caption=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{caption}"),
+            caption=admin_caption,
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
@@ -878,19 +926,25 @@ async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
             parse_mode="Markdown",
             protect_content=True
         )
+        # اطلاع به ادمین در صورت موفقیت
+        await update.message.reply_text(
+            clean_text("پاسخ شما با موفقیت به کاربر ارسال شد! 😊"),
+            parse_mode="Markdown"
+        )
     except TelegramError as e:
         logger.error(f"خطا در ارسال پاسخ به کاربر {target_user_id}: {e}")
+        error_message = "خطا در ارسال پاسخ به کاربر! 😔 "
+        if "chat not found" in str(e).lower():
+            error_message += "کاربر چت با ربات را شروع نکرده است."
+        elif "blocked by user" in str(e).lower():
+            error_message += "ربات توسط کاربر بلاک شده است."
+        else:
+            error_message += "لطفاً دوباره امتحان کنید."
         await update.message.reply_text(
-            clean_text("خطا در ارسال پاسخ به کاربر! 😔 لطفاً دوباره امتحان کنید."),
+            clean_text(error_message),
             parse_mode="Markdown"
         )
         return
-
-    # اطلاع به ادمین
-    await update.message.reply_text(
-        clean_text("پاسخ شما با موفقیت به کاربر ارسال شد! 😊"),
-        parse_mode="Markdown"
-    )
 
     # حذف پیام پشتیبانی از دیکشنری
     del SUPPORT_MESSAGES[support_id]
