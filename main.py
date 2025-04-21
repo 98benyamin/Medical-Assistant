@@ -289,6 +289,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     chat_id = update.message.chat_id
 
+    logger.info(f"پیام دریافتی از کاربر {user_id}: {message_text}, mode: {context.user_data.get('mode')}")
+
     # بررسی عضویت در کانال
     is_member = await check_channel_membership(context.bot, user_id)
     if not is_member:
@@ -306,7 +308,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # بررسی محدودیت نرخ درخواست‌ها
     if not check_rate_limit(context, user_id):
         await update.message.reply_text(
-            clean_text("لطفاً چند لحظه صبر کن! 😊 تعداد درخواست‌هیشنت درخواست‌هات خیلی زیاده!"),
+            clean_text("لطفاً چند لحظه صبر کن! 😊 تعداد درخواست‌هات خیلی زیاده!"),
             reply_markup=MAIN_MENU_KEYBOARD,
             parse_mode="MarkdownV2"
         )
@@ -333,6 +335,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "کلسترول 🩺": "کلسترول بالا یعنی چی؟ چه راهکارهایی برای کاهشش وجود داره؟",
         "نوار قلب ❤️": "نوار قلب چی نشون می‌ده؟ نتایجش چطور تفسیر می‌شه؟"
     }
+
+    # انتخاب منوی زیر دکمه‌ها بر اساس mode
+    mode = context.user_data.get("mode")
+    sub_menu = MAIN_MENU_KEYBOARD
+    if mode == "ai_chat":
+        sub_menu = MEDICAL_SUB_MENU_KEYBOARD
+    elif mode == "drug_identification":
+        sub_menu = DRUG_SUB_MENU_KEYBOARD
+    elif mode == "lab_ecg":
+        sub_menu = LAB_ECG_SUB_MENU_KEYBOARD
 
     if message_text == "مشاوره پزشکی 🩺":
         AI_CHAT_USERS.add(user_id)
@@ -396,7 +408,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="MarkdownV2"
         )
     elif message_text == "سؤالم دیگه‌ست ❓":
-        mode = context.user_data.get("mode")
         if mode == "ai_chat":
             await update.message.reply_text(
                 clean_text("**سؤالت درباره بیماری یا موضوع پزشکی چیه؟ 😊**\n*مثلاً بپرس: برای سرماخوردگی چی خوبه؟*"),
@@ -415,7 +426,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=LAB_ECG_SUB_MENU_KEYBOARD,
                 parse_mode="MarkdownV2"
             )
-    elif user_id in AI_CHAT_USERS and context.user_data.get("mode") in ["ai_chat", "drug_identification", "lab_ecg"]:
+        else:
+            await update.message.reply_text(
+                clean_text("**لطفاً یکی از گزینه‌های منو رو انتخاب کن! 😊**"),
+                reply_markup=MAIN_MENU_KEYBOARD,
+                parse_mode="MarkdownV2"
+            )
+    elif user_id in AI_CHAT_USERS and mode in ["ai_chat", "drug_identification", "lab_ecg"]:
         message_id = update.message.message_id
         with PROCESSING_LOCK:
             if message_id in PROCESSED_MESSAGES:
@@ -433,10 +450,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["chat_history"] = chat_history
 
         # انتخاب پرامپ سیستمی
-        system_message = SYSTEM_MESSAGES.get(context.user_data["mode"], SYSTEM_MESSAGES["ai_chat"])
+        system_message = SYSTEM_MESSAGES.get(mode, SYSTEM_MESSAGES["ai_chat"])
 
         # ارسال پیام موقت
-        temp_message = await update.message.reply_text(clean_text("**🩺 در حال پردازش...**"), parse_mode="MarkdownV2")
+        temp_message = await update.message.reply_text(clean_text("**🩺**"), parse_mode="MarkdownV2")
 
         payload = {
             "model": "openai-large",
@@ -467,21 +484,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     warning = "\n**هشدار! 🚨** این مورد ممکنه جدی باشه! فوراً با پزشک مشورت کن."
                 await update.message.reply_text(
                     f"{ai_response}{warning}",
-                    reply_markup={
-                        "ai_chat": MEDICAL_SUB_MENU_KEYBOARD,
-                        "drug_identification": DRUG_SUB_MENU_KEYBOARD,
-                        "lab_ecg": LAB_ECG_SUB_MENU_KEYBOARD
-                    }.get(context.user_data["mode"]),
+                    reply_markup=sub_menu,
                     parse_mode="MarkdownV2"
                 )
             else:
                 await update.message.reply_text(
                     clean_text("**اوپس، سیستم پزشکی‌مون یه لحظه قفل کرد! 🩺**\nلطفاً دوباره سؤالت رو بفرست. 😊"),
-                    reply_markup={
-                        "ai_chat": MEDICAL_SUB_MENU_KEYBOARD,
-                        "drug_identification": DRUG_SUB_MENU_KEYBOARD,
-                        "lab_ecg": LAB_ECG_SUB_MENU_KEYBOARD
-                    }.get(context.user_data["mode"]),
+                    reply_markup=sub_menu,
                     parse_mode="MarkdownV2"
                 )
         except Exception as e:
@@ -492,11 +501,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"خطا در اتصال به API چت: {e}")
             await update.message.reply_text(
                 clean_text("**اوه، انگار ابزار تشخیص‌مون نیاز به بررسی داره! 💉**\nلطفاً دوباره سؤالت رو بفرست. 😊"),
-                reply_markup={
-                    "ai_chat": MEDICAL_SUB_MENU_KEYBOARD,
-                    "drug_identification": DRUG_SUB_MENU_KEYBOARD,
-                    "lab_ecg": LAB_ECG_SUB_MENU_KEYBOARD
-                }.get(context.user_data["mode"]),
+                reply_markup=sub_menu,
                 parse_mode="MarkdownV2"
             )
     else:
@@ -509,7 +514,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت عکس‌های ارسالی و تحلیل با API Pollinations"""
     user_id = update.effective_user.id
-    if user_id not in AI_CHAT_USERS or context.user_data.get("mode") != "lab_ecg":
+    mode = context.user_data.get("mode")
+    if user_id not in AI_CHAT_USERS or mode != "lab_ecg":
         await update.message.reply_text(
             clean_text("**لطفاً برای تحلیل تصویر، گزینه 'آزمایش و نوار قلب' رو از منو انتخاب کن! 😊**"),
             reply_markup=MAIN_MENU_KEYBOARD,
@@ -545,7 +551,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         PROCESSED_MESSAGES.add(message_id)
 
     chat_id = update.message.chat_id
-    temp_message = await update.message.reply_text(clean_text("**🔬 در حال تحلیل تصویر...**"), parse_mode="MarkdownV2")
+    temp_message = await update.message.reply_text(clean_text("**🩺**"), parse_mode="MarkdownV2")
 
     file_url = file.file_path
     caption = update.message.caption if update.message.caption else "این تصویر پزشکی (مثل برگه آزمایش یا نوار قلب) چیه؟ به‌صورت خلاصه و دقیق تحلیل کن! 🩺"
