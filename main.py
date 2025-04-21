@@ -409,7 +409,7 @@ async def check_channel_membership(bot, user_id):
         logger.error(f"خطا در بررسی عضویت کاربر {user_id} در کانال {CHANNEL_ID}: {e}")
         return False
 
-# تعریف منوی اصلی با چیدمان جدید و ایموجی در سمت راست
+# تعریف منوی اصلی با ایموجی‌ها در سمت راست
 MAIN_MENU_KEYBOARD = ReplyKeyboardMarkup([
     ["مشاوره پزشکی 🩺"],
     ["سلامت روان 🧠", "سلامت دهان و دندان 🦷"],
@@ -417,7 +417,7 @@ MAIN_MENU_KEYBOARD = ReplyKeyboardMarkup([
     ["راهنما ⁉️", "پشتیبانی 💬"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
-# تعریف زیرمنوی جعبه ابزار پزشکی با ایموجی در سمت راست
+# تعریف زیرمنوی جعبه ابزار پزشکی با ایموجی‌ها در سمت راست
 TOOLBOX_MENU_KEYBOARD = ReplyKeyboardMarkup([
     ["بررسی آزمایش 🧪", "تحلیل نوار قلب 📈"],
     ["تفسیر رادیولوژی 🩻", "تشخیص علائم 🧫"],
@@ -425,12 +425,12 @@ TOOLBOX_MENU_KEYBOARD = ReplyKeyboardMarkup([
     ["شاخص توده بدنی 🎚", "بازگشت 🔙"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
-# تعریف منوی زیر دکمه‌ها با دکمه بازگشت و ایموجی در سمت راست
+# تعریف منوی زیر دکمه‌ها با ایموجی در سمت راست
 SUB_MENU_KEYBOARD = ReplyKeyboardMarkup([
     ["بازگشت 🔙"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
-# منوی پشتیبانی
+# منوی پشتیبانی با ایموجی در سمت راست
 SUPPORT_KEYBOARD = ReplyKeyboardMarkup([
     ["بازگشت 🔙"]
 ], resize_keyboard=True, one_time_keyboard=False)
@@ -570,15 +570,24 @@ async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_T
     support_id = str(uuid.uuid4())
 
     # ارسال پیام به ادمین
-    admin_message = await context.bot.send_message(
-        chat_id=ADMIN_ID,
-        text=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{message_text}"),
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
-        ]),
-        protect_content=True
-    )
+    try:
+        admin_message = await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{message_text}"),
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
+            ]),
+            protect_content=True
+        )
+    except TelegramError as e:
+        logger.error(f"خطا در ارسال پیام به ادمین {ADMIN_ID}: {e}")
+        await update.message.reply_text(
+            clean_text("اوپس، مشکلی در ارسال پیام پیش اومد! 😔 لطفاً دوباره امتحان کن."),
+            reply_markup=SUPPORT_KEYBOARD,
+            parse_mode="Markdown"
+        )
+        return
 
     # ذخیره اطلاعات پیام پشتیبانی
     SUPPORT_MESSAGES[support_id] = {
@@ -588,8 +597,9 @@ async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_T
     }
 
     # اطلاع به کاربر
+    await update.message.reply_text("📬", parse_mode="Markdown")
     await update.message.reply_text(
-        clean_text("پیام شما ارسال شد. به زودی پاسخ از طریق ادمین ارسال می‌شود. 😊"),
+        clean_text("متن شما با موفقیت ارسال شد ✅"),
         reply_markup=SUPPORT_KEYBOARD,
         parse_mode="Markdown"
     )
@@ -632,16 +642,25 @@ async def handle_support_photo(update: Update, context: ContextTypes.DEFAULT_TYP
     support_id = str(uuid.uuid4())
 
     # ارسال عکس به ادمین
-    admin_message = await context.bot.send_photo(
-        chat_id=ADMIN_ID,
-        photo=photo.file_id,
-        caption=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{caption}"),
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
-        ]),
-        protect_content=True
-    )
+    try:
+        admin_message = await context.bot.send_photo(
+            chat_id=ADMIN_ID,
+            photo=photo.file_id,
+            caption=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{caption}"),
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
+            ]),
+            protect_content=True
+        )
+    except TelegramError as e:
+        logger.error(f"خطا در ارسال عکس به ادمین {ADMIN_ID}: {e}")
+        await update.message.reply_text(
+            clean_text("اوپس، مشکلی در ارسال پیام پیش اومد! 😔 لطفاً دوباره امتحان کن."),
+            reply_markup=SUPPORT_KEYBOARD,
+            parse_mode="Markdown"
+        )
+        return
 
     # ذخیره اطلاعات پیام پشتیبانی
     SUPPORT_MESSAGES[support_id] = {
@@ -651,8 +670,9 @@ async def handle_support_photo(update: Update, context: ContextTypes.DEFAULT_TYP
     }
 
     # اطلاع به کاربر
+    await update.message.reply_text("📬", parse_mode="Markdown")
     await update.message.reply_text(
-        clean_text("پیام شما ارسال شد. به زودی پاسخ از طریق ادمین ارسال می‌شود. 😊"),
+        clean_text("متن شما با موفقیت ارسال شد ✅"),
         reply_markup=SUPPORT_KEYBOARD,
         parse_mode="Markdown"
     )
@@ -695,16 +715,25 @@ async def handle_support_video(update: Update, context: ContextTypes.DEFAULT_TYP
     support_id = str(uuid.uuid4())
 
     # ارسال ویدیو به ادمین
-    admin_message = await context.bot.send_video(
-        chat_id=ADMIN_ID,
-        video=video.file_id,
-        caption=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{caption}"),
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
-        ]),
-        protect_content=True
-    )
+    try:
+        admin_message = await context.bot.send_video(
+            chat_id=ADMIN_ID,
+            video=video.file_id,
+            caption=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{caption}"),
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
+            ]),
+            protect_content=True
+        )
+    except TelegramError as e:
+        logger.error(f"خطا در ارسال ویدیو به ادمین {ADMIN_ID}: {e}")
+        await update.message.reply_text(
+            clean_text("اوپس، مشکلی در ارسال پیام پیش اومد! 😔 لطفاً دوباره امتحان کن."),
+            reply_markup=SUPPORT_KEYBOARD,
+            parse_mode="Markdown"
+        )
+        return
 
     # ذخیره اطلاعات پیام پشتیبانی
     SUPPORT_MESSAGES[support_id] = {
@@ -714,8 +743,9 @@ async def handle_support_video(update: Update, context: ContextTypes.DEFAULT_TYP
     }
 
     # اطلاع به کاربر
+    await update.message.reply_text("📬", parse_mode="Markdown")
     await update.message.reply_text(
-        clean_text("پیام شما ارسال شد. به زودی پاسخ از طریق ادمین ارسال می‌شود. 😊"),
+        clean_text("متن شما با موفقیت ارسال شد ✅"),
         reply_markup=SUPPORT_KEYBOARD,
         parse_mode="Markdown"
     )
@@ -758,16 +788,25 @@ async def handle_support_document(update: Update, context: ContextTypes.DEFAULT_
     support_id = str(uuid.uuid4())
 
     # ارسال فایل به ادمین
-    admin_message = await context.bot.send_document(
-        chat_id=ADMIN_ID,
-        document=document.file_id,
-        caption=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{caption}"),
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
-        ]),
-        protect_content=True
-    )
+    try:
+        admin_message = await context.bot.send_document(
+            chat_id=ADMIN_ID,
+            document=document.file_id,
+            caption=clean_text(f"پیام جدید از کاربر {user_id}:\n\n{caption}"),
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("پاسخ", callback_data=f"reply_{support_id}")]
+            ]),
+            protect_content=True
+        )
+    except TelegramError as e:
+        logger.error(f"خطا در ارسال فایل به ادمین {ADMIN_ID}: {e}")
+        await update.message.reply_text(
+            clean_text("اوپس، مشکلی در ارسال پیام پیش اومد! 😔 لطفاً دوباره امتحان کن."),
+            reply_markup=SUPPORT_KEYBOARD,
+            parse_mode="Markdown"
+        )
+        return
 
     # ذخیره اطلاعات پیام پشتیبانی
     SUPPORT_MESSAGES[support_id] = {
@@ -777,8 +816,9 @@ async def handle_support_document(update: Update, context: ContextTypes.DEFAULT_
     }
 
     # اطلاع به کاربر
+    await update.message.reply_text("📬", parse_mode="Markdown")
     await update.message.reply_text(
-        clean_text("پیام شما ارسال شد. به زودی پاسخ از طریق ادمین ارسال می‌شود. 😊"),
+        clean_text("متن شما با موفقیت ارسال شد ✅"),
         reply_markup=SUPPORT_KEYBOARD,
         parse_mode="Markdown"
     )
