@@ -929,6 +929,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # مدیریت پیام‌های پشتیبانی
+    if context.user_data.get("mode") == "support":
+        await handle_support_message(update, context)
+        return
+
     # مدیریت دکمه‌های منوی اصلی
     if message_text == "مشاوره پزشکی 🩺":
         AI_CHAT_USERS.add(user_id)
