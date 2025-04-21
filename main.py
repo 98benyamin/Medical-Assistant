@@ -688,7 +688,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["chat_history"] = []
         await update.message.reply_text(
             clean_text(
-                "�UFFIX *شاخص توده بدنی* فعال شد!\n\n"
+                "🎚 *شاخص توده بدنی* فعال شد!\n\n"
                 "قد و وزن خودت رو بگو!\n"
                 "مثلاً: *170 سانتی‌متر، 70 کیلوگرم* 😊"
             ),
