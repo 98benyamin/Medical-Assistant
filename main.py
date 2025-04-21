@@ -177,6 +177,11 @@ MAIN_MENU_KEYBOARD = ReplyKeyboardMarkup([
     ["راهنما ❓"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
+# تعریف منوی زیر دکمه‌ها با دکمه برگشت
+SUB_MENU_KEYBOARD = ReplyKeyboardMarkup([
+    ["برگشت به منو ⬅️"]
+], resize_keyboard=True, one_time_keyboard=False)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ارسال پیام خوش‌آمدگویی با بررسی عضویت در کانال"""
     user_id = update.effective_user.id
@@ -227,7 +232,8 @@ async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     welcome_message = clean_text(
-        f"آفرین {user_name}! حالا که تو کانال عضوی، دستیار پزشکی برات فعال شد! 🩺\into change the code to support Persian text correctly. 😊"
+        f"آفرین {user_name}! حالا که تو کانال عضوی، دستیار پزشکی برات فعال شد! 🩺\n"
+        "یکی از گزینه‌های زیر رو انتخاب کن:"
     )
     await query.edit_message_text(welcome_message, reply_markup=MAIN_MENU_KEYBOARD)
 
@@ -258,7 +264,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["chat_history"] = []
         await update.message.reply_text(
             clean_text("🤖 دستیار پزشکی فعال شد!\n\nسؤالت درباره بیماری یا موضوع پزشکی چیه؟ 😊"),
-            reply_markup=ReplyKeyboardRemove()
+            reply_markup=SUB_MENU_KEYBOARD
         )
     elif message_text == "شناسایی داروها 💊":
         AI_CHAT_USERS.add(user_id)
@@ -267,7 +273,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["chat_history"] = []
         await update.message.reply_text(
             clean_text("💊 لطفاً اسم دارو یا سؤالت درباره داروها رو بگو تا راهنمایی‌ت کنم! 😊"),
-            reply_markup=ReplyKeyboardRemove()
+            reply_markup=SUB_MENU_KEYBOARD
         )
     elif message_text == "آزمایش و نوار قلب 🩻":
         AI_CHAT_USERS.add(user_id)
@@ -276,7 +282,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["chat_history"] = []
         await update.message.reply_text(
             clean_text("🩻 لطفاً تصویر برگه آزمایش یا نوار قلب رو بفرست یا سؤالت رو بگو! 😊"),
-            reply_markup=ReplyKeyboardRemove()
+            reply_markup=SUB_MENU_KEYBOARD
         )
     elif message_text == "راهنما ❓":
         guide_message = clean_text(
@@ -288,6 +294,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "سؤالی داری؟ یکی از گزینه‌های منو رو انتخاب کن! 😊"
         )
         await update.message.reply_text(guide_message, reply_markup=MAIN_MENU_KEYBOARD)
+    elif message_text == "برگشت به منو ⬅️":
+        if user_id in AI_CHAT_USERS:
+            AI_CHAT_USERS.remove(user_id)
+        context.user_data.clear()
+        await update.message.reply_text(
+            clean_text("به منوی اصلی برگشتی! 😊 یکی از گزینه‌ها رو انتخاب کن:"),
+            reply_markup=MAIN_MENU_KEYBOARD
+        )
     elif user_id in AI_CHAT_USERS and context.user_data.get("mode") in ["ai_chat", "drug_identification", "lab_ecg"]:
         message_id = update.message.message_id
         with PROCESSING_LOCK:
@@ -330,11 +344,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ai_response = clean_text(ai_response.strip())
                 chat_history.append({"role": "assistant", "content": ai_response})
                 context.user_data["chat_history"] = chat_history
-                await update.message.reply_text(ai_response, reply_markup=MAIN_MENU_KEYBOARD)
+                await update.message.reply_text(ai_response, reply_markup=SUB_MENU_KEYBOARD)
             else:
                 await update.message.reply_text(
                     clean_text("اوپس، سیستم پزشکی‌مون یه لحظه قفل کرد! 🩺 لطفاً دوباره سؤالت رو بفرست. 😊"),
-                    reply_markup=MAIN_MENU_KEYBOARD
+                    reply_markup=SUB_MENU_KEYBOARD
                 )
         except Exception as e:
             try:
@@ -344,7 +358,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"خطا در اتصال به API چت: {e}")
             await update.message.reply_text(
                 clean_text("اوه، انگار ابزار تشخیص‌مون نیاز به بررسی داره! 💉 لطفاً دوباره سؤالت رو بفرست. 😊"),
-                reply_markup=MAIN_MENU_KEYBOARD
+                reply_markup=SUB_MENU_KEYBOARD
             )
     else:
         await update.message.reply_text(
@@ -415,11 +429,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ai_response = clean_text(ai_response.strip())
             chat_history.append({"role": "assistant", "content": ai_response})
             context.user_data["chat_history"] = chat_history
-            await update.message.reply_text(ai_response, reply_markup=MAIN_MENU_KEYBOARD)
+            await update.message.reply_text(ai_response, reply_markup=SUB_MENU_KEYBOARD)
         else:
             await update.message.reply_text(
                 clean_text("اوه، دستگاه تحلیل‌مون نیاز به تنظیم داره! 💉 لطفاً دوباره عکس رو بفرست. 🩻"),
-                reply_markup=MAIN_MENU_KEYBOARD
+                reply_markup=SUB_MENU_KEYBOARD
             )
     except Exception as e:
         try:
@@ -429,7 +443,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"خطا در تحلیل تصویر: {e}")
         await update.message.reply_text(
             clean_text("اوپس، اسکنر پزشکی‌مون یه لحظه خاموش شد! 🩺 لطفاً دوباره عکس رو بفرست. 😊"),
-            reply_markup=MAIN_MENU_KEYBOARD
+            reply_markup=SUB_MENU_KEYBOARD
         )
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
