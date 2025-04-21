@@ -427,12 +427,12 @@ TOOLBOX_MENU_KEYBOARD = ReplyKeyboardMarkup([
 
 # تعریف منوی زیر دکمه‌ها با ایموجی در سمت راست
 SUB_MENU_KEYBOARD = ReplyKeyboardMarkup([
- ["🔙 بازگشت "]
+ ["🔙 بازگشت"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
 # منوی پشتیبانی با ایموجی در سمت راست
 SUPPORT_KEYBOARD = ReplyKeyboardMarkup([
- ["🔙 بازگشت "]
+ ["🔙 بازگشت"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
 async def check_rate_limit(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
@@ -539,7 +539,7 @@ async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_T
     display_name = f"@{username}" if username else update.message.from_user.first_name
     display_id = f"@{username}" if username else str(user_id)
 
-    if message_text == "بازگشت 🔙":
+    if message_text == "🔙 بازگشت":
         if user_id in AI_CHAT_USERS:
             AI_CHAT_USERS.remove(user_id)
         context.user_data.clear()
@@ -961,7 +961,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # مدیریت دکمه بازگشت در همه حالت‌ها
-    if message_text == "بازگشت 🔙":
+    if message_text == "🔙 بازگشت":
         if user_id in AI_CHAT_USERS:
             AI_CHAT_USERS.remove(user_id)
         context.user_data.clear()
