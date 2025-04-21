@@ -198,7 +198,7 @@ async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_member:
         await query.edit_message_text(
             clean_text(
-                f"اوپس! 😅 هنوز تو کانال @{CHANNEL_ID} عضو نشدی!\n"
+                f"اوپس! 😅 هنوز تو کانال عضو نشدی!\n"
                 "لطفاً تو کانال عضو شو و دوباره دکمه 'عضو شدم' رو بزن! 🚑"
             ),
             reply_markup=InlineKeyboardMarkup([
