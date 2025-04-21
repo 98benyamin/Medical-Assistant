@@ -376,21 +376,21 @@ async def check_channel_membership(bot, user_id):
 # تعریف منوی اصلی با چیدمان جدید
 MAIN_MENU_KEYBOARD = ReplyKeyboardMarkup([
     ["🩺 مشاوره پزشکی"],
-    ["🧠 سلامت روان | 🦷 سلامت دهان و دندان"],
+    ["🧠 سلامت روان", "🦷 سلامت دهان و دندان"],
     ["🧰 جعبه ابزار پزشکی"],
-    ["⁉️ راهنما | 💬 پشتیبانی"]
+    ["⁉️ راهنما", "💬 پشتیبانی"]
+], resize_keyboard=True, one_time_keyboard=False)
+
+# تعریف زیرمنوی جعبه ابزار پزشکی
+TOOLBOX_MENU_KEYBOARD = ReplyKeyboardMarkup([
+    ["بررسی آزمایش 🧪", "تحلیل نوار قلب 📈"],
+    ["تفسیر رادیولوژی 🩻", "تشخیص علائم 🧫"],
+    ["شناسایی داروها 💊", "مراقبت از زخم 🩹"],
+    ["🔙 بازگشت"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
 # تعریف منوی زیر دکمه‌ها با دکمه بازگشت
 SUB_MENU_KEYBOARD = ReplyKeyboardMarkup([
-    ["🔙 بازگشت"]
-], resize_keyboard=True, one_time_keyboard=False)
-
-# تعریف منوی جعبه ابزار پزشکی
-TOOLBOX_MENU_KEYBOARD = ReplyKeyboardMarkup([
-    ["🧪 بررسی آزمایش | 📈 تحلیل نوار قلب"],
-    ["🩻 تفسیر رادیولوژی | 🧫 تشخیص علائم"],
-    ["💊 شناسایی داروها | 🩹 مراقبت از زخم"],
     ["🔙 بازگشت"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
@@ -552,7 +552,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             clean_text(
                 "🦷 *سلامت دهان و دندان* فعال شد!\n\n"
                 "تصویر دندان بفرست یا علائم رو بگو!\n"
-                "مثلاً: *دندونم درد می‌کنه، چیکار کنم؟* 😊"
+                "مثلاً: *دند GADGETونم درد می‌کنه، چیکار کنم؟* 😊"
             ),
             reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
@@ -564,6 +564,90 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "یکی از ابزارهای زیر رو انتخاب کن:"
             ),
             reply_markup=TOOLBOX_MENU_KEYBOARD,
+            parse_mode="Markdown"
+        )
+    elif message_text == "بررسی آزمایش 🧪":
+        AI_CHAT_USERS.add(user_id)
+        context.user_data.clear()
+        context.user_data["mode"] = "lab_test"
+        context.user_data["chat_history"] = []
+        await update.message.reply_text(
+            clean_text(
+                "🧪 *بررسی آزمایش* فعال شد!\n\n"
+                "تصویر برگه آزمایش بفرست یا سؤالت رو بگو!\n"
+                "مثلاً: *قند خون 150 یعنی چی؟* 😊"
+            ),
+            reply_markup=SUB_MENU_KEYBOARD,
+            parse_mode="Markdown"
+        )
+    elif message_text == "تحلیل نوار قلب 📈":
+        AI_CHAT_USERS.add(user_id)
+        context.user_data.clear()
+        context.user_data["mode"] = "ecg"
+        context.user_data["chat_history"] = []
+        await update.message.reply_text(
+            clean_text(
+                "📈 *تحلیل نوار قلب* فعال شد!\n\n"
+                "تصویر نوار قلب بفرست یا سؤالت رو بگو!\n"
+                "مثلاً: *ریتم نامنظم یعنی چی؟* 😊"
+            ),
+            reply_markup=SUB_MENU_KEYBOARD,
+            parse_mode="Markdown"
+        )
+    elif message_text == "تفسیر رادیولوژی 🩻":
+        AI_CHAT_USERS.add(user_id)
+        context.user_data.clear()
+        context.user_data["mode"] = "radiology"
+        context.user_data["chat_history"] = []
+        await update.message.reply_text(
+            clean_text(
+                "🩻 *تفسیر رادیولوژی* فعال شد!\n\n"
+                "تصویر رادیولوژی (مثل X-ray) بفرست یا سؤالت رو بگو!\n"
+                "مثلاً: *این سایه تو X-ray چیه؟* 😊"
+            ),
+            reply_markup=SUB_MENU_KEYBOARD,
+            parse_mode="Markdown"
+        )
+    elif message_text == "تشخیص علائم 🧫":
+        AI_CHAT_USERS.add(user_id)
+        context.user_data.clear()
+        context.user_data["mode"] = "symptom_diagnosis"
+        context.user_data["chat_history"] = []
+        await update.message.reply_text(
+            clean_text(
+                "🧫 *تشخیص علائم* فعال شد!\n\n"
+                "علائمت رو بگو یا تصویر (مثل لک پوستی) بفرست!\n"
+                "مثلاً: *دو روزه تب دارم و سرفه می‌کنم، چیه؟* 😊"
+            ),
+            reply_markup=SUB_MENU_KEYBOARD,
+            parse_mode="Markdown"
+        )
+    elif message_text == "شناسایی داروها 💊":
+        AI_CHAT_USERS.add(user_id)
+        context.user_data.clear()
+        context.user_data["mode"] = "drug_identification"
+        context.user_data["chat_history"] = []
+        await update.message.reply_text(
+            clean_text(
+                "💊 *شناسایی داروها* فعال شد!\n\n"
+                "تصویر قرص یا جعبه بفرست، یا سؤالت رو بگو!\n"
+                "مثلاً: *عوارض آسپرین چیه؟* 😊"
+            ),
+            reply_markup=SUB_MENU_KEYBOARD,
+            parse_mode="Markdown"
+        )
+    elif message_text == "مراقبت از زخم 🩹":
+        AI_CHAT_USERS.add(user_id)
+        context.user_data.clear()
+        context.user_data["mode"] = "wound_care"
+        context.user_data["chat_history"] = []
+        await update.message.reply_text(
+            clean_text(
+                "🩹 *مراقبت از زخم* فعال شد!\n\n"
+                "تصویر زخم بفرست یا علائم رو بگو!\n"
+                "مثلاً: *زخمم قرمز شده، چیکار کنم؟* 😊"
+            ),
+            reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
     elif message_text == "⁉️ راهنما":
@@ -579,7 +663,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "  - *تفسیر رادیولوژی 🩻*: تصویر X-ray یا CT بفرست.\n"
             "  - *شناسایی داروها 💊*: تصویر قرص یا سؤال دارویی بفرست.\n"
             "  - *مراقبت از زخم 🩹*: تصویر زخم یا علائم بفرست.\n"
-            "- **پشتیبانی 💬**: برای سؤالات یا مشکلات با ما تماس بگیر.\n\n"
+            "- **پشتیبانی 💬**: برای سؤالات دیگه با ما تماس بگیر.\n\n"
             "*همیشه برای تشخیص یا درمان با پزشک مشورت کن!* 🩺\n"
             "سؤالی داری؟ یکی از گزینه‌ها رو انتخاب کن! 😊"
         )
@@ -592,97 +676,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             clean_text(
                 "💬 *پشتیبانی دستیار پزشکی*\n\n"
-                "اگه سؤالی داری یا به مشکلی برخورد کردی، با ما در تماس باش!\n"
-                "لطفاً مشکل یا سؤالت رو به آیدی زیر بفرست:\n"
-                "@MedicalBotSupport\n\n"
+                "اگه سؤال یا مشکلی داری، با ادمین تماس بگیر: @SupportAdmin\n"
                 "یا دوباره یکی از گزینه‌های منو رو انتخاب کن! 😊"
             ),
             reply_markup=MAIN_MENU_KEYBOARD,
-            parse_mode="Markdown"
-        )
-    # مدیریت دکمه‌های جعبه ابزار پزشکی
-    elif message_text == "🧪 بررسی آزمایش":
-        AI_CHAT_USERS.add(user_id)
-        context.user_data.clear()
-        context.user_data["mode"] = "lab_test"
-        context.user_data["chat_history"] = []
-        await update.message.reply_text(
-            clean_text(
-                "🧪 *بررسی آزمایش* فعال شد!\n\n"
-                "تصویر برگه آزمایش بفرست یا سؤالت رو بگو!\n"
-                "مثلاً: *قند خون 150 یعنی چی؟* 😊"
-            ),
-            reply_markup=SUB_MENU_KEYBOARD,
-            parse_mode="Markdown"
-        )
-    elif message_text == "📈 تحلیل نوار قلب":
-        AI_CHAT_USERS.add(user_id)
-        context.user_data.clear()
-        context.user_data["mode"] = "ecg"
-        context.user_data["chat_history"] = []
-        await update.message.reply_text(
-            clean_text(
-                "📈 *تحلیل نوار قلب* فعال شد!\n\n"
-                "تصویر نوار قلب بفرست یا سؤالت رو بگو!\n"
-                "مثلاً: *ریتم نامنظم یعنی چی؟* 😊"
-            ),
-            reply_markup=SUB_MENU_KEYBOARD,
-            parse_mode="Markdown"
-        )
-    elif message_text == "🩻 تفسیر رادیولوژی":
-        AI_CHAT_USERS.add(user_id)
-        context.user_data.clear()
-        context.user_data["mode"] = "radiology"
-        context.user_data["chat_history"] = []
-        await update.message.reply_text(
-            clean_text(
-                "🩻 *تفسیر رادیولوژی* فعال شد!\n\n"
-                "تصویر رادیولوژی (مثل X-ray) بفرست یا سؤالت رو بگو!\n"
-                "مثلاً: *این سایه تو X-ray چیه؟* 😊"
-            ),
-            reply_markup=SUB_MENU_KEYBOARD,
-            parse_mode="Markdown"
-        )
-    elif message_text == "🧫 تشخیص علائم":
-        AI_CHAT_USERS.add(user_id)
-        context.user_data.clear()
-        context.user_data["mode"] = "symptom_diagnosis"
-        context.user_data["chat_history"] = []
-        await update.message.reply_text(
-            clean_text(
-                "🧫 *تشخیص علائم* فعال شد!\n\n"
-                "علائمت رو بگو یا تصویر (مثل لک پوستی) بفرست!\n"
-                "مثلاً: *دو روزه تب دارم و سرفه می‌کنم، چیه؟* 😊"
-            ),
-            reply_markup=SUB_MENU_KEYBOARD,
-            parse_mode="Markdown"
-        )
-    elif message_text == "💊 شناسایی داروها":
-        AI_CHAT_USERS.add(user_id)
-        context.user_data.clear()
-        context.user_data["mode"] = "drug_identification"
-        context.user_data["chat_history"] = []
-        await update.message.reply_text(
-            clean_text(
-                "💊 *شناسایی داروها* فعال شد!\n\n"
-                "تصویر قرص یا جعبه بفرست، یا سؤالت رو بگو!\n"
-                "مثلاً: *عوارض آسپرین چیه؟* 😊"
-            ),
-            reply_markup=SUB_MENU_KEYBOARD,
-            parse_mode="Markdown"
-        )
-    elif message_text == "🩹 مراقبت از زخم":
-        AI_CHAT_USERS.add(user_id)
-        context.user_data.clear()
-        context.user_data["mode"] = "wound_care"
-        context.user_data["chat_history"] = []
-        await update.message.reply_text(
-            clean_text(
-                "🩹 *مراقبت از زخم* فعال شد!\n\n"
-                "تصویر زخم بفرست یا علائم رو بگو!\n"
-                "مثلاً: *زخمم قرمز شده، چیکار کنم؟* 😊"
-            ),
-            reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
     elif message_text == "🔙 بازگشت":
