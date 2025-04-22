@@ -7,3 +7,4 @@ pillow>=10.2.0
 rembg>=2.0.59
 onnxruntime>=1.15.1
 tenacity>=8.5.0
+aiosqlite>=0.20.0
