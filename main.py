@@ -729,7 +729,7 @@ async def handle_support_video(update: Update, context: ContextTypes.DEFAULT_TYP
     # فرمت کپشن برای ادمین
     admin_caption = (
         f"📬 *پیام جدید از کاربر*: {display_name}\n"
-        f"�ID *آیدی کاربر*: {display_id}\n\n"
+        f"🆔 *آیدی کاربر*: {display_id}\n\n"
         f"*متن پیام*:\n{caption}"
     )
 
@@ -985,6 +985,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_support_message(update, context)
         return
 
+    # لاگ کردن حالت و پرامپ انتخاب‌شده
+    mode = context.user_data.get("mode")
+    logger.info(f"پردازش پیام در حالت: {mode}")
+
     # مدیریت دکمه‌های منوی اصلی
     if message_text == "🩺 مشاوره پزشکی":
         AI_CHAT_USERS.add(user_id)
@@ -1186,6 +1190,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # انتخاب پرامپ سیستمی بر اساس mode
         system_message = SYSTEM_MESSAGES.get(context.user_data["mode"], SYSTEM_MESSAGES["ai_chat"])
+        logger.info(f"پرامپ انتخاب‌شده برای حالت {context.user_data['mode']}: {system_message[:100]}...")
 
         # ایجاد پیام‌ها برای g4f
         messages = [
@@ -1197,10 +1202,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # استفاده از g4f
         client = Client()
-        for attempt in range(2):
+        for attempt in range(3):  # افزایش تعداد تلاش‌ها
             try:
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model="gpt-4o",  # تغییر به gpt-4o
                     messages=messages,
                     max_tokens=300,
                     seed=42
@@ -1220,8 +1225,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 break
             except Exception as e:
-                logger.error(f"خطا در اتصال به g4f (تلاش {attempt + 1}): {e}")
-                if attempt == 1:
+                logger.error(f"خطا در اتصال به g4f (تلاش {attempt + 1}): {str(e)}")
+                if attempt == 2:
                     try:
                         await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
                     except TelegramError as e:
@@ -1242,6 +1247,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت عکس‌های ارسالی"""
     user_id = update.effective_user.id
     mode = context.user_data.get("mode")
+
+    logger.info(f"دریافت عکس از کاربر {user_id} در حالت: {mode}")
 
     if mode == "support":
         await handle_support_photo(update, context)
@@ -1266,8 +1273,22 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         temp_message = await update.message.reply_text("🔬", parse_mode="Markdown")
 
         photo = update.message.photo[-1]
-        file = await context.bot.get_file(photo.file_id)
-        file_url = file.file_path
+        try:
+            file = await context.bot.get_file(photo.file_id)
+            file_url = file.file_path
+            logger.info(f"URL تصویر دریافت‌شده: {file_url}")
+        except TelegramError as e:
+            logger.error(f"خطا در دریافت فایل تصویر: {e}")
+            try:
+                await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
+            except TelegramError as e:
+                logger.error(f"خطا در حذف پیام موقت: {e}")
+            await update.message.reply_text(
+                "اوپس، مشکلی در دریافت تصویر پیش اومد! 😔 لطفاً دوباره تصویر رو بفرست.",
+                reply_markup=SUB_MENU_KEYBOARD,
+                parse_mode="Markdown"
+            )
+            return
 
         caption = update.message.caption if update.message.caption else "این تصویر چیه؟ به‌صورت خلاصه و دقیق تحلیل کن! 🩺"
 
@@ -1283,7 +1304,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["chat_history"] = chat_history
 
         # انتخاب پرامپ سیستمی بر اساس mode
-        system_message = SYSTEM_MESSAGES[mode]
+        system_message = SYSTEM_MESSAGES.get(mode, SYSTEM_MESSAGES["ai_chat"])
+        logger.info(f"پرامپ انتخاب‌شده برای حالت {mode}: {system_message[:100]}...")
 
         # ایجاد پیام‌ها برای g4f
         messages = [
@@ -1292,10 +1314,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # استفاده از g4f
         client = Client()
-        for attempt in range(2):
+        for attempt in range(3):  # افزایش تعداد تلاش‌ها
             try:
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model="gpt-4o",  # تغییر به gpt-4o
                     messages=messages,
                     max_tokens=300,
                     seed=42
@@ -1313,16 +1335,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=SUB_MENU_KEYBOARD,
                     parse_mode="Markdown"
                 )
+                logger.info(f"پاسخ موفق برای تصویر در حالت {mode}")
                 break
             except Exception as e:
-                logger.error(f"خطا در تحلیل تصویر با g4f (تلاش {attempt + 1}): {e}")
-                if attempt == 1:
+                logger.error(f"خطا در تحلیل تصویر با g4f (تلاش {attempt + 1}): {str(e)}")
+                if attempt == 2:
                     try:
                         await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
                     except TelegramError as e:
                         logger.error(f"خطا در حذف پیام موقت: {e}")
                     await update.message.reply_text(
-                        "اوپس، *اسکنر پزشکی‌مون* یه لحظه خاموش شد! 🩺 لطفاً دوباره عکس رو بفرست. 😊",
+                        "اوپس، *اسکنر پزشکی‌مون* یه لحظه خاموش شد! 🩺 لطفاً دوباره عکس رو بفرست یا بعداً امتحان کن. 😊",
                         reply_markup=SUB_MENU_KEYBOARD,
                         parse_mode="Markdown"
                     )
@@ -1406,35 +1429,27 @@ async def main():
     """راه‌اندازی ربات با وب‌هوک و سرور FastAPI"""
     global application
     try:
-        application = Application.builder().token(TOKEN).read_timeout(60).write_timeout(60).connect_timeout(60).build()
-        await application.bot.set_webhook(url=WEBHOOK_URL)
-        logger.info(f"Webhook روی {WEBHOOK_URL} تنظیم شد.")
+        application = Application.builder().token(TOKEN).build()
 
-        application.add_handler(CommandHandler("start", start, filters=filters.ChatType.PRIVATE))
+        # ثبت هندلرها
+        application.add_handler(CommandHandler("start", start))
         application.add_handler(CallbackQueryHandler(handle_callback_query))
-        # هندلر برای پیام‌های ادمین در حالت admin_reply
-        application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE & filters.User(user_id=ADMIN_ID),
-            handle_admin_reply
-        ))
-        # هندلر عمومی برای پیام‌های متنی
-        application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
-            handle_message
-        ))
-        application.add_handler(MessageHandler(filters.PHOTO & filters.ChatType.PRIVATE, handle_photo))
-        application.add_handler(MessageHandler(filters.VIDEO & filters.ChatType.PRIVATE, handle_video))
-        application.add_handler(MessageHandler(filters.Document.ALL & filters.ChatType.PRIVATE, handle_document))
-        application.add_handler(MessageHandler(filters.FORWARDED & filters.ChatType.PRIVATE, handle_forwarded_message))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+        application.add_handler(MessageHandler(filters.VIDEO, handle_video))
+        application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+        application.add_handler(MessageHandler(filters.FORWARDED, handle_forwarded_message))
+        application.add_handler(MessageHandler(filters.REPLY & filters.User(ADMIN_ID), handle_admin_reply))
         application.add_error_handler(error_handler)
 
-        logger.info("در حال آماده‌سازی ربات...")
-        await application.initialize()
-        logger.info("در حال شروع ربات...")
-        await application.start()
+        # تنظیم وب‌هوک
+        logger.info("تنظیم وب‌هوک...")
+        await application.bot.set_webhook(url=WEBHOOK_URL)
 
-        config = uvicorn.Config(app, host="0.0.0.0", port=8000)
+        # راه‌اندازی سرور FastAPI
+        config = uvicorn.Config(app=app, host="0.0.0.0", port=8000)
         server = uvicorn.Server(config)
+        logger.info("راه‌اندازی سرور FastAPI...")
         await server.serve()
 
     except Exception as e:
@@ -1442,4 +1457,7 @@ async def main():
         raise
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        logger.error(f"خطا در اجرای برنامه: {e}")
