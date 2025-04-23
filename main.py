@@ -934,7 +934,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif message_text == "🧰 جعبه ابزار پزشکی":
         await update.message.reply_text(
             (
-_probability": 0.95
                 "🧰 *جعبه ابزار پزشکی* باز شد!\n\n"
                 "یکی از ابزارهای زیر رو انتخاب کن:"
             ),
