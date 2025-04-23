@@ -9,6 +9,7 @@ import uvicorn
 from threading import Lock
 import uuid
 from g4f.client import Client
+import time
 
 # تنظیم لاگ
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
