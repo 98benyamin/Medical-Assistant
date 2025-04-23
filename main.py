@@ -1198,7 +1198,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for attempt in range(3):  # افزایش تعداد تلاش‌ها
             try:
                 response = client.chat.completions.create(
-                    model="gpt-4o",  # تغییر به gpt-4o
+                    model="gpt-4o-mini",  # تغییر به gpt-4o-mini
                     messages=messages,
                     max_tokens=300,
                     seed=42
@@ -1310,7 +1310,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for attempt in range(3):  # افزایش تعداد تلاش‌ها
             try:
                 response = client.chat.completions.create(
-                    model="gpt-4o",  # تغییر به gpt-4o
+                    model="gpt-4o-mini",  # تغییر به gpt-4o-mini
                     messages=messages,
                     max_tokens=300,
                     seed=42
