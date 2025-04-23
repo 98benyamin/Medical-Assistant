@@ -90,7 +90,8 @@ You are a super-advanced Persian-language medical AI assistant specialized in EC
     "radiology": CENTRAL_SYSTEM_MESSAGE + """
 You are a super-advanced Persian-language medical AI assistant specialized in radiology. Speak like a fellowship-trained radiologist.
 🎯 Core Behaviors:
-- تحلیل تصاویر رادیولوژی (X-ray, CT, MRI): شناسایی شکستگی، تومور، التهاب، مایعات غیرطبیعی.
+- تحلیل تصاویر رادیولوژی (X-ray, CT, MRI): شناسایی شکستگی، تومور،
+التهاب، مایعات غیرطبیعی.
 - توصیف دقیق لوکالیزاسیون و ابعاد یافته‌ها.
 - هشدارهای فوریتی (مثلاً پنوموتوراکس بزرگ): “⚠️ هشدار: بزرگ بودن پنوموتوراکس—فوراً دراورسی انجام دهید.”
 - ساختار: “یافته‌ها (Findings)”، “تفسیر (Impression)”، “پیشنهادات (Recommendations)”.
@@ -176,7 +177,7 @@ You are a super-advanced Persian-language medical AI assistant specialized in or
 - Use structured sections (e.g. “تشخیص‌ها”، “توصیه‌های بهداشتی”، “علائم هشدار”) to organize your reply.
 🧬 Model Capabilities:
 - High-resolution image analysis: caries, periodontal pockets, mucosal lesions.
-- Differential-diagnosis logic for oral pain, swelling, bleeding.
+- Differential-diagnosis[len( logic for oral pain, swelling, bleeding.
 - Prescription-level knowledge of topical/systemic antibiotics, analgesics (with doses), and referral criteria.
 📢 Language Style:
 - پاسخ‌ها را در فارسی رسمی اما طبیعی بنویسید.
@@ -343,7 +344,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_member = await check_channel_membership(context.bot, user_id)
     if not is_member:
         welcome_message = (
-            f"سلام {user_name}!\nبرای استفاده از دستیار پزشکی، باید تو کانال عضو بشی! 🏥\n"
+            f"سلام {user_name}!\nبرای استفاده از دستیار پزشکی дезиնسپت پزشکی، باید تو کانال عضو بشی! 🏥\n"
             "لطفاً تو کانال عضو شو و بعد دکمه *عضو شدم* رو بزن! 🚑"
         )
         keyboard = [
@@ -1052,22 +1053,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif message_text == "⁉️ راهنما":
         guide_message = (
-            "📖 *راهنمای استفاده از دستیار پزشکی*:\n\n"
-            "- **مشاوره پزشکی 🩺**: درباره بیماری‌ها یا علائم سؤال کن.\n"
-            "- **سلامت روان 🧠**: درباره استرس یا روحیات بگو.\n"
-            "- **سلامت دهان و دندان 🦷**: تصویر دندان یا علائم بفرست.\n"
-            "- **جعبه ابزار پزشکی 🧰**:\n"
-            "  - *تشخیص علائم 🧫*: علائم یا تصویر بفرست برای تشخیص.\n"
-            "  - *بررسی آزمایش 🧪*: برگه آزمایش بفرست یا سؤال کن.\n"
-            "  - *تحلیل نوار قلب 📈*: تصویر نوار قلب بفرست.\n"
-            "  - *تفسیر رادیولوژی 🩻*: تصویر X-ray یا CT بفرست.\n"
-            "  - *شناسایی داروها 💊*: تصویر قرص یا سؤال دارویی بفرست.\n"
-            "  - *مراقبت از زخم 🩹*: تصویر زخم یا علائم بفرست.\n"
-            "  - *شاخص توده بدنی 🎚*: قد و وزن رو بگو تا BMI محاسبه بشه.\n"
-            "  - *وسایل پزشکی 💉*: تصویر وسیله پزشکی بفرست برای شناسایی.\n"
-            "- **پشتیبانی 💬**: برای سؤالات دیگه، متن، عکس، ویدیو یا فایل بفرست.\n\n"
-            "*همیشه برای تشخیص یا درمان با پزشک مشورت کن!* 🩺\n"
-            "سؤالی داری؟ یکی از گزینه‌ها رو انتخاب کن! 😊"
+            "📘 *راهنمای کامل استفاده از دستیار پزشکی هوشمند*:\n\n"
+            "- **مشاوره پزشکی عمومی 🩺**: در مورد بیماری‌ها، علائم یا نگرانی‌های بدنی سؤال کن.\n"
+            "- **سلامت روان 🧠**: درباره اضطراب، افسردگی یا وضعیت روانی‌ات صحبت کن.\n"
+            "- **سلامت دهان و دندان 🦷**: تصویر دندان یا لثه‌ات رو برای بررسی تخصصی بفرست.\n\n"
+            "- **جعبه ابزار پیشرفته پزشکی 🧰**:\n"
+            "  - *تشخیص علائم 🧫*: علائم جسمی یا تصویر مربوط رو بفرست تا بررسی بشه.\n"
+            "  - *بررسی آزمایش‌ها 🧪*: برگه آزمایش یا سؤالت رو ارسال کن تا تفسیر کنم.\n"
+            "  - *تحلیل نوار قلب 📈*: عکس نوار قلب رو بفرست تا دقیق تفسیر بشه.\n"
+            "  - *تفسیر تصویربرداری پزشکی 🩻*: عکس X-ray یا سی‌تی‌اسکن رو بفرست.\n"
+            "  - *شناسایی داروها 💊*: تصویر قرص یا بسته دارو رو بفرست تا بررسی کنم.\n"
+            "  - *مراقبت از زخم‌ها 🩹*: عکس زخم یا سوختگی رو بفرست برای توصیه درمانی.\n"
+            "  - *محاسبه BMI 🎚*: قد و وزنت رو بگو تا شاخص توده بدنی محاسبه بشه.\n"
+            "  - *شناسایی وسایل پزشکی 💉*: عکس وسیله پزشکی رو بفرست تا توضیح بدم چی هست.\n\n"
+            "- **پشتیبانی عمومی 💬**: هر سؤال یا فایل، عکس، ویدیو داری، همینجا بفرست.\n\n"
+            "🔔 *یادآوری مهم*: این دستیار جایگزین پزشک نیست. برای تشخیص یا درمان قطعی، با پزشک مشورت کن.\n"
+            "سؤالی داری؟ یکی از گزینه‌ها رو انتخاب کن و شروع کنیم! 😊"
         )
         await update.message.reply_text(
             guide_message,
@@ -1110,8 +1111,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ] + chat_history
 
         # ارسال پیام موقت
-        temp_message = await update.message.reply_text("🩺", parse_mode="Markdown")
-        await update.message.reply_text("**درحال پاسخ دادن صبور باشید!**", parse_mode="Markdown")
+        temp_emoji_message = await update.message.reply_text("🩺", parse_mode="Markdown")
+        temp_text_message = await update.message.reply_text("**درحال پاسخ دادن صبور باشید!**", parse_mode="Markdown")
 
         # استفاده از g4f
         client = Client()
@@ -1123,10 +1124,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     max_tokens=300,
                     seed=42
                 )
+                # حذف پیام‌های موقت
                 try:
-                    await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
+                    await context.bot.delete_message(chat_id=chat_id, message_id=temp_emoji_message.message_id)
+                    await context.bot.delete_message(chat_id=chat_id, message_id=temp_text_message.message_id)
                 except TelegramError as e:
-                    logger.error(f"خطا در حذف پیام موقت: {e}")
+                    logger.error(f"خطا در حذف پیام‌های موقت: {e}")
 
                 ai_response = response.choices[0].message.content.strip()
                 chat_history.append({"role": "assistant", "content": ai_response})
@@ -1141,9 +1144,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"خطا در اتصال به g4f (تلاش {attempt + 1}): {str(e)}")
                 if attempt == 2:
                     try:
-                        await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
+                        await context.bot.delete_message(chat_id=chat_id, message_id=temp_emoji_message.message_id)
+                        await context.bot.delete_message(chat_id=chat_id, message_id=temp_text_message.message_id)
                     except TelegramError as e:
-                        logger.error(f"خطا در حذف پیام موقت: {e}")
+                        logger.error(f"خطا در حذف پیام‌های موقت: {e}")
                     await update.message.reply_text(
                         "اوه، *ابزار تشخیص‌مون* نیاز به بررسی داره! 💉 لطفاً دوباره سؤالت رو بفرست. 😊",
                         reply_markup=SUB_MENU_KEYBOARD,
@@ -1183,8 +1187,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             PROCESSED_MESSAGES.add(message_id)
 
         chat_id = update.message.chat_id
-        temp_message = await update.message.reply_text("🔬", parse_mode="Markdown")
-        await update.message.reply_text("**در حال بررسی عکس شما صبور باشید!**", parse_mode="Markdown")
+        temp_emoji_message = await update.message.reply_text("🔬", parse_mode="Markdown")
+        temp_text_message = await update.message.reply_text("**در حال بررسی عکس شما صبور باشید!**", parse_mode="Markdown")
 
         photo = update.message.photo[-1]
         try:
@@ -1194,9 +1198,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except TelegramError as e:
             logger.error(f"خطا در دریافت فایل تصویر: {e}")
             try:
-                await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
+                await context.bot.delete_message(chat_id=chat_id, message_id=temp_emoji_message.message_id)
+                await context.bot.delete_message(chat_id=chat_id, message_id=temp_text_message.message_id)
             except TelegramError as e:
-                logger.error(f"خطا در حذف پیام موقت: {e}")
+                logger.error(f"خطا در حذف پیام‌های موقت: {e}")
             await update.message.reply_text(
                 "اوپس، مشکلی در دریافت تصویر پیش اومد! 😔 لطفاً دوباره تصویر رو بفرست.",
                 reply_markup=SUB_MENU_KEYBOARD,
@@ -1236,10 +1241,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     max_tokens=300,
                     seed=42
                 )
+                # حذف پیام‌های موقت
                 try:
-                    await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
+                    await context.bot.delete_message(chat_id=chat_id, message_id=temp_emoji_message.message_id)
+                    await context.bot.delete_message(chat_id=chat_id, message_id=temp_text_message.message_id)
                 except TelegramError as e:
-                    logger.error(f"خطا در حذف پیام موقت: {e}")
+                    logger.error(f"خطا در حذف پیام‌های موقت: {e}")
 
                 ai_response = response.choices[0].message.content.strip()
                 chat_history.append({"role": "assistant", "content": ai_response})
@@ -1255,9 +1262,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"خطا در تحلیل تصویر با g4f (تلاش {attempt + 1}): {str(e)}")
                 if attempt == 2:
                     try:
-                        await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
+                        await context.bot.delete_message(chat_id=chat_id, message_id=temp_emoji_message.message_id)
+                        await context.bot.delete_message(chat_id=chat_id, message_id=temp_text_message.message_id)
                     except TelegramError as e:
-                        logger.error(f"خطا در حذف پیام موقت: {e}")
+                        logger.error(f"خطا در حذف پیام‌های موقت: {e}")
                     await update.message.reply_text(
                         "اوپس، *اسکنر پزشکی‌مون* یه لحظه خاموش شد! 🩺 لطفاً دوباره عکس رو بفرست یا بعداً امتحان کن. 😊",
                         reply_markup=SUB_MENU_KEYBOARD,
