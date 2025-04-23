@@ -3,9 +3,6 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 from telegram.error import TelegramError, NetworkError, TimedOut
-from fastapi import FastAPI, Request
-from fastapi.responses import Response
-import uvicorn
 from threading import Lock
 import uuid
 from g4f.client import Client
@@ -15,9 +12,8 @@ import time
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# توکن و وب‌هوک
+# توکن ربات
 TOKEN = '8123059269:AAHlvWT2ZZ3iC1ICRkmiuwTjBHvdM-NLy18'
-WEBHOOK_URL = 'https://medical-assistant-rum5.onrender.com/webhook'
 
 # شناسه کانال و ادمین
 CHANNEL_ID = '@bbbyyyrt'
@@ -90,8 +86,7 @@ You are a super-advanced Persian-language medical AI assistant specialized in EC
     "radiology": CENTRAL_SYSTEM_MESSAGE + """
 You are a super-advanced Persian-language medical AI assistant specialized in radiology. Speak like a fellowship-trained radiologist.
 🎯 Core Behaviors:
-- تحلیل تصاویر رادیولوژی (X-ray, CT, MRI): شناسایی شکستگی، تومور،
-التهاب، مایعات غیرطبیعی.
+- تحلیل تصاویر رادیولوژی (X-ray, CT, MRI): شناسایی شکستگی، تومور، التهاب، مایعات غیرطبیعی.
 - توصیف دقیق لوکالیزاسیون و ابعاد یافته‌ها.
 - هشدارهای فوریتی (مثلاً پنوموتوراکس بزرگ): “⚠️ هشدار: بزرگ بودن پنوموتوراکس—فوراً دراورسی انجام دهید.”
 - ساختار: “یافته‌ها (Findings)”، “تفسیر (Impression)”، “پیشنهادات (Recommendations)”.
@@ -177,7 +172,7 @@ You are a super-advanced Persian-language medical AI assistant specialized in or
 - Use structured sections (e.g. “تشخیص‌ها”، “توصیه‌های بهداشتی”، “علائم هشدار”) to organize your reply.
 🧬 Model Capabilities:
 - High-resolution image analysis: caries, periodontal pockets, mucosal lesions.
-- Differential-diagnosis[len( logic for oral pain, swelling, bleeding.
+- Differential-diagnosis logic for oral pain, swelling, bleeding.
 - Prescription-level knowledge of topical/systemic antibiotics, analgesics (with doses), and referral criteria.
 📢 Language Style:
 - پاسخ‌ها را در فارسی رسمی اما طبیعی بنویسید.
@@ -215,7 +210,7 @@ You are a super-advanced Persian-language medical AI assistant specialized in id
 📢 Language Style:
 - فارسی رسمی اما قابل‌فهم: “این وسیله یک *استتوسکوپ* است که برای شنیدن صدای قلب و ریه استفاده می‌شود.”
 - Use relevant emojis (💉🩺🔧) to enhance clarity.
-- Emphasize that professional guidance is needed for proper use: “برای استفاده صحیح، حتماً با متخصص مشورت کنید.”
+- Emphasize that professional guidance is needed for proper use: “برای استفاده صحیح، حتماً با متخصص مشورت کنید。”
 """
 }
 
@@ -228,54 +223,6 @@ PROCESSED_MESSAGES = set()
 SUPPORT_MESSAGES = {}  # ساختار: {support_id: {"user_id": int, "user_message_id": int, "admin_message_id": int}}
 
 application = None
-
-app = FastAPI()
-
-@app.post("/webhook")
-async def webhook(request: Request):
-    """مدیریت درخواست‌های وب‌هوک"""
-    global application
-    update = await request.json()
-    update_obj = Update.de_json(update, application.bot)
-    update_id = update_obj.update_id
-    logger.info(f"دریافت درخواست با update_id: {update_id}")
-    with PROCESSING_LOCK:
-        if update_id in PROCESSED_MESSAGES:
-            logger.warning(f"درخواست تکراری با update_id: {update_id} - نادیده گرفته شد")
-            return {"status": "ok"}
-        PROCESSED_MESSAGES.add(update_id)
-    asyncio.create_task(application.process_update(update_obj))
-    return {"status": "ok"}
-
-@app.get("/")
-async def root(request: Request):
-    """نقطه ورود پایه برای بررسی سرور و پینگ UptimeRobot"""
-    user_agent = request.headers.get("User-Agent", "Unknown")
-    uptime_robot_header = request.headers.get("X-UptimeRobot", None)
-    
-    if uptime_robot_header == "Ping":
-        logger.info("دریافت درخواست پینگ از UptimeRobot (هدر سفارشی)")
-    elif "UptimeRobot" in user_agent:
-        logger.info("دریافت درخواست پینگ از UptimeRobot (User-Agent)")
-    else:
-        logger.info(f"دریافت درخواست به / از User-Agent: {user_agent}")
-    
-    try:
-        response = {"message": "Bot is running!"}
-        return response
-    except Exception as e:
-        logger.error(f"خطا در پاسخ به درخواست پینگ: {e}")
-        raise
-
-@app.head("/")
-async def root_head():
-    """پشتیبانی از متد HEAD برای پینگ‌های UptimeRobot"""
-    return Response(status_code=200)
-
-@app.get("/favicon.ico")
-async def favicon():
-    """پاسخ به درخواست‌های favicon.ico"""
-    return Response(status_code=204)
 
 async def check_channel_membership(bot, user_id):
     """بررسی عضویت کاربر در کانال"""
@@ -344,7 +291,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_member = await check_channel_membership(context.bot, user_id)
     if not is_member:
         welcome_message = (
-            f"سلام {user_name}!\nبرای استفاده از دستیار پزشکی дезиնسپت پزشکی، باید تو کانال عضو بشی! 🏥\n"
+            f"سلام {user_name}!\nبرای استفاده از دستیار پزشکی دزینسپت پزشکی، باید تو کانال عضو بشی! 🏥\n"
             "لطفاً تو کانال عضو شو و بعد دکمه *عضو شدم* رو بزن! 🚑"
         )
         keyboard = [
@@ -1236,7 +1183,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for attempt in range(3):  # افزایش تعداد تلاش‌ها
             try:
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",  # تغییر به gpt-4o-mini
+                    model="gpt-4o-mini",  # تغییر به g4f-mini
                     messages=messages,
                     max_tokens=300,
                     seed=42
@@ -1348,7 +1295,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def main():
-    """راه‌اندازی ربات با وب‌هوک و سرور FastAPI"""
+    """راه‌اندازی ربات با Polling"""
     global application
     try:
         # ساخت شیء Application
@@ -1373,24 +1320,27 @@ async def main():
         logger.info("راه‌اندازی Application...")
         await application.start()
 
-        # تنظیم وب‌هوک
-        logger.info("تنظیم وب‌هوک...")
-        await application.bot.set_webhook(url=WEBHOOK_URL)
+        # شروع Polling
+        logger.info("شروع Polling...")
+        await application.updater.start_polling(
+            poll_interval=1.0,
+            timeout=10,
+            drop_pending_updates=True
+        )
 
-        # راه‌اندازی سرور FastAPI
-        config = uvicorn.Config(app=app, host="0.0.0.0", port=8000)
-        server = uvicorn.Server(config)
-        logger.info("راه‌اندازی سرور FastAPI...")
-        try:
-            await server.serve()
-        finally:
-            # توقف Application هنگام خاموش شدن سرور
-            logger.info("توقف Application...")
-            await application.stop()
+        # نگه‌داشتن برنامه در حال اجرا
+        logger.info("ربات در حالت Polling اجرا شد.")
+        while True:
+            await asyncio.sleep(3600)  # خواب برای جلوگیری از اتمام منابع
 
     except Exception as e:
         logger.error(f"خطا در راه‌اندازی ربات: {e}")
         raise
+    finally:
+        # توقف Application هنگام خاموش شدن
+        logger.info("توقف Application...")
+        await application.stop()
+        await application.updater.stop()
 
 if __name__ == "__main__":
     try:
