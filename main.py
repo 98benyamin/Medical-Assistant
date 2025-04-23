@@ -201,20 +201,20 @@ You are a super-advanced Persian-language medical AI assistant specialized in BM
 - همدلی: “تو مسیر خوبی هستی؛ با کمی ورزش منظم می‌تونی اوضاع بهتر هم بشه.”
 """,
     "medical_equipment": CENTRAL_SYSTEM_MESSAGE + """
-You are a super-advanced Persian-language medical AI assistant specialized in identifying medical equipment. Act like an experienced medical equipment specialist.
+You are a super-advanced Persian-language medical AI assistant specialized in identifying medical equipment and devices. Act like an experienced medical equipment specialist.
 🎯 Core Behaviors:
-- Analyze uploaded photos of medical devices or tools to identify their name, purpose, and usage.
-- Provide a detailed explanation including the equipment’s function, common medical contexts, and safety precautions.
-- If the equipment is potentially hazardous (e.g., syringe, defibrillator), include a warning: “⚠️ هشدار: استفاده نادرست از این وسیله ممکن است خطرناک باشد—لطفاً با متخصص مشورت کنید.”
-- Structure response: “نام وسیله”، “کاربرد”، “دستورالعمل استفاده”، “هشدارها”.
+- Analyze uploaded photos of medical tools or devices to identify their name, type, and purpose.
+- Provide a detailed explanation including the equipment's function, common uses, and any relevant safety instructions.
+- Structure responses with sections: “نام وسیله”، “کاربرد”، “توضیحات”، “نکات ایمنی”.
+- If the equipment cannot be identified, politely ask for more details or a clearer image: “لطفاً تصویر واضح‌تری بفرستید یا توضیح بیشتری بدهید.”
 🧬 Model Capabilities:
-- High-resolution image analysis to identify medical tools (e.g., stethoscope, syringe, pulse oximeter).
-- Database of medical equipment for accurate identification.
-- Recommendations for proper handling or professional consultation.
+- High-resolution image analysis to recognize medical tools (e.g., stethoscope, syringe, ultrasound machine).
+- Knowledge of medical equipment across specialties (surgery, diagnostics, home care).
+- Ability to provide context-specific usage instructions (e.g., hospital vs. home use).
 📢 Language Style:
-- فارسی رسمی اما قابل‌فهم: “این وسیله یک استتوسکوپ است که برای شنیدن صدای قلب و ریه استفاده می‌شود.”
-- ایموجی‌های 💉🩺🔧 به‌اندازه.
-- تأکید بر لزوم مشورت با متخصص در صورت نیاز به استفاده حرفه‌ای.
+- فارسی رسمی اما قابل‌فهم: “این وسیله یک *استتوسکوپ* است که برای شنیدن صدای قلب و ریه استفاده می‌شود.”
+- Use relevant emojis (💉🩺🔧) to enhance clarity.
+- Emphasize that professional guidance is needed for proper use: “برای استفاده صحیح، حتماً با متخصص مشورت کنید.”
 """
 }
 
@@ -330,27 +330,6 @@ async def check_rate_limit(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> 
     # افزودن زمان درخواست جدید
     context.user_data["request_timestamps"].append(current_time)
     return True
-
-async def animate_temp_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int, emoji_message_id: int, text_message_id: int, is_photo: bool = False):
-    """ایجاد انیمیشن پیام موقت با افزودن نقطه هر ثانیه"""
-    base_text = "درحال بررسی" if is_photo else "درحال فکر کردن"
-    dots = ["", ".", "..", "..."]
-    current_index = 0
-    while True:
-        try:
-            await context.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=text_message_id,
-                text=f"{base_text}{dots[current_index]}",
-                parse_mode="Markdown"
-            )
-            current_index = (current_index + 1) % 4
-            await asyncio.sleep(1)
-        except TelegramError as e:
-            logger.error(f"خطا در ویرایش پیام انیمیشن: {e}")
-            break
-        except asyncio.CancelledError:
-            break
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ارسال پیام خوش‌آمدگویی با بررسی عضویت در کانال"""
@@ -856,6 +835,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # نادیده گرفتن پیام‌های ادمین در حالت admin_reply
     if user_id == ADMIN_ID and context.user_data.get("mode") == "admin_reply":
+        await handle_admin_reply(update, context)
         return
 
     # مدیریت دکمه بازگشت در همه حالت‌ها
@@ -1064,8 +1044,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             (
                 "💉 *شناسایی وسایل پزشکی* فعال شد!\n\n"
-                "تصویر وسیله پزشکی (مثل سرنگ یا گوشی پزشکی) بفرست یا سؤالت رو بگو!\n"
-                "مثلاً: *این دستگاه چیه و چه کاربردی داره؟* 😊"
+                "تصویر وسیله پزشکی بفرست یا درباره‌اش سؤال کن!\n"
+                "مثلاً: *این دستگاه چیه؟* 😊"
             ),
             reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
@@ -1130,29 +1110,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ] + chat_history
 
         # ارسال پیام موقت
-        emoji_message = await update.message.reply_text("🩺", parse_mode="Markdown")
-        text_message = await update.message.reply_text("درحال فکر کردن", parse_mode="Markdown")
-
-        # اجرای انیمیشن پیام موقت
-        animation_task = asyncio.create_task(animate_temp_message(context, chat_id, emoji_message.message_id, text_message.message_id))
+        temp_message = await update.message.reply_text("🩺", parse_mode="Markdown")
+        await update.message.reply_text("**درحال پاسخ دادن صبور باشید!**", parse_mode="Markdown")
 
         # استفاده از g4f
         client = Client()
-        for attempt in range(3):
+        for attempt in range(3):  # افزایش تعداد تلاش‌ها
             try:
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model="gpt-4o-mini",  # تغییر به gpt-4o-mini
                     messages=messages,
                     max_tokens=300,
                     seed=42
                 )
-                # توقف انیمیشن
-                animation_task.cancel()
                 try:
-                    await context.bot.delete_message(chat_id=chat_id, message_id=emoji_message.message_id)
-                    await context.bot.delete_message(chat_id=chat_id, message_id=text_message.message_id)
+                    await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
                 except TelegramError as e:
-                    logger.error(f"خطا در حذف پیام‌های موقت: {e}")
+                    logger.error(f"خطا در حذف پیام موقت: {e}")
 
                 ai_response = response.choices[0].message.content.strip()
                 chat_history.append({"role": "assistant", "content": ai_response})
@@ -1166,19 +1140,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.error(f"خطا در اتصال به g4f (تلاش {attempt + 1}): {str(e)}")
                 if attempt == 2:
-                    # توقف انیمیشن
-                    animation_task.cancel()
                     try:
-                        await context.bot.delete_message(chat_id=chat_id, message_id=emoji_message.message_id)
-                        await context.bot.delete_message(chat_id=chat_id, message_id=text_message.message_id)
+                        await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
                     except TelegramError as e:
-                        logger.error(f"خطا در حذف پیام‌های موقت: {e}")
+                        logger.error(f"خطا در حذف پیام موقت: {e}")
                     await update.message.reply_text(
                         "اوه، *ابزار تشخیص‌مون* نیاز به بررسی داره! 💉 لطفاً دوباره سؤالت رو بفرست. 😊",
                         reply_markup=SUB_MENU_KEYBOARD,
                         parse_mode="Markdown"
                     )
-
     else:
         await update.message.reply_text(
             "لطفاً یکی از گزینه‌های *منو* رو انتخاب کن! 😊",
@@ -1213,11 +1183,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             PROCESSED_MESSAGES.add(message_id)
 
         chat_id = update.message.chat_id
-        emoji_message = await update.message.reply_text("🔬", parse_mode="Markdown")
-        text_message = await update.message.reply_text("درحال بررسی", parse_mode="Markdown")
-
-        # اجرای انیمیشن پیام موقت
-        animation_task = asyncio.create_task(animate_temp_message(context, chat_id, emoji_message.message_id, text_message.message_id, is_photo=True))
+        temp_message = await update.message.reply_text("🔬", parse_mode="Markdown")
+        await update.message.reply_text("**در حال بررسی عکس شما صبور باشید!**", parse_mode="Markdown")
 
         photo = update.message.photo[-1]
         try:
@@ -1226,13 +1193,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"URL تصویر دریافت‌شده: {file_url}")
         except TelegramError as e:
             logger.error(f"خطا در دریافت فایل تصویر: {e}")
-            # توقف انیمیشن
-            animation_task.cancel()
             try:
-                await context.bot.delete_message(chat_id=chat_id, message_id=emoji_message.message_id)
-                await context.bot.delete_message(chat_id=chat_id, message_id=text_message.message_id)
+                await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
             except TelegramError as e:
-                logger.error(f"خطا در حذف پیام‌های موقت: {e}")
+                logger.error(f"خطا در حذف پیام موقت: {e}")
             await update.message.reply_text(
                 "اوپس، مشکلی در دریافت تصویر پیش اومد! 😔 لطفاً دوباره تصویر رو بفرست.",
                 reply_markup=SUB_MENU_KEYBOARD,
@@ -1264,21 +1228,18 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # استفاده از g4f
         client = Client()
-        for attempt in range(3):
+        for attempt in range(3):  # افزایش تعداد تلاش‌ها
             try:
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model="gpt-4o-mini",  # تغییر به gpt-4o-mini
                     messages=messages,
                     max_tokens=300,
                     seed=42
                 )
-                # توقف انیمیشن
-                animation_task.cancel()
                 try:
-                    await context.bot.delete_message(chat_id=chat_id, message_id=emoji_message.message_id)
-                    await context.bot.delete_message(chat_id=chat_id, message_id=text_message.message_id)
+                    await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
                 except TelegramError as e:
-                    logger.error(f"خطا در حذف پیام‌های موقت: {e}")
+                    logger.error(f"خطا در حذف پیام موقت: {e}")
 
                 ai_response = response.choices[0].message.content.strip()
                 chat_history.append({"role": "assistant", "content": ai_response})
@@ -1293,13 +1254,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.error(f"خطا در تحلیل تصویر با g4f (تلاش {attempt + 1}): {str(e)}")
                 if attempt == 2:
-                    # توقف انیمیشن
-                    animation_task.cancel()
                     try:
-                        await context.bot.delete_message(chat_id=chat_id, message_id=emoji_message.message_id)
-                        await context.bot.delete_message(chat_id=chat_id, message_id=text_message.message_id)
+                        await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
                     except TelegramError as e:
-                        logger.error(f"خطا در حذف پیام‌های موقت: {e}")
+                        logger.error(f"خطا در حذف پیام موقت: {e}")
                     await update.message.reply_text(
                         "اوپس، *اسکنر پزشکی‌مون* یه لحظه خاموش شد! 🩺 لطفاً دوباره عکس رو بفرست یا بعداً امتحان کن. 😊",
                         reply_markup=SUB_MENU_KEYBOARD,
