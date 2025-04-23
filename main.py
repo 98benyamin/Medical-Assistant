@@ -1429,6 +1429,7 @@ async def main():
     """راه‌اندازی ربات با وب‌هوک و سرور FastAPI"""
     global application
     try:
+        # ساخت شیء Application
         application = Application.builder().token(TOKEN).build()
 
         # ثبت هندلرها
@@ -1442,6 +1443,14 @@ async def main():
         application.add_handler(MessageHandler(filters.REPLY & filters.User(ADMIN_ID), handle_admin_reply))
         application.add_error_handler(error_handler)
 
+        # مقداردهی اولیه Application
+        logger.info("مقداردهی اولیه Application...")
+        await application.initialize()
+
+        # راه‌اندازی Application
+        logger.info("راه‌اندازی Application...")
+        await application.start()
+
         # تنظیم وب‌هوک
         logger.info("تنظیم وب‌هوک...")
         await application.bot.set_webhook(url=WEBHOOK_URL)
@@ -1450,7 +1459,12 @@ async def main():
         config = uvicorn.Config(app=app, host="0.0.0.0", port=8000)
         server = uvicorn.Server(config)
         logger.info("راه‌اندازی سرور FastAPI...")
-        await server.serve()
+        try:
+            await server.serve()
+        finally:
+            # توقف Application هنگام خاموش شدن سرور
+            logger.info("توقف Application...")
+            await application.stop()
 
     except Exception as e:
         logger.error(f"خطا در راه‌اندازی ربات: {e}")
