@@ -1103,7 +1103,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "تصویر قرص یا جعبه بفرست، یا سؤالت رو بگو!\n"
                 "مثلاً: *عوارض آسپرین چیه؟* 😊"
             ),
-            reply_markup=SUB_MENU_KEYBOARDdrug_identification",
+            reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
     elif message_text == "🩹 مراقبت از زخم":
