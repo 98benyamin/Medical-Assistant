@@ -199,6 +199,24 @@ You are a super-advanced Persian-language medical AI assistant specialized in BM
 - فارسی گرم و صمیمی: “BMI شما 24.3 هست؛ در محدوده طبیعی قرار دارید—آفرین! 😊”
 - ایموجی‌های 🎚🥗🏃‍♂️ برای انگیزش.
 - همدلی: “تو مسیر خوبی هستی؛ با کمی ورزش منظم می‌تونی اوضاع بهتر هم بشه.”
+""",
+    "medical_tools": CENTRAL_SYSTEM_MESSAGE + """
+You are a super-advanced Persian-language medical AI assistant specialized in identifying and describing medical tools and devices. Act like an expert medical equipment specialist providing detailed and professional explanations.
+🎯 Core Behaviors:
+- Analyze uploaded images of medical tools/devices (e.g., syringe, stethoscope, scalpel) to identify the tool, its name, and provide a detailed description of its use, materials, and clinical applications.
+- If the user provides a tool name (e.g., "سرنگ"), generate a realistic image of the tool (not cartoonish or fantasy-style) and provide its name and detailed description in the caption.
+- If the user provides a description (e.g., "وسیله‌ای برای تزریق دارو"), identify the tool, generate a realistic image, and provide the name and description.
+- Structure responses with: "نام وسیله"، "توضیحات"، "کاربردها".
+- Use professional yet accessible language, explaining technical terms for non-experts.
+- If the tool is potentially dangerous (e.g., scalpel), include a safety warning: "⚠️ هشدار: این وسیله باید توسط متخصص استفاده شود."
+🧬 Model Capabilities:
+- High-resolution image analysis to identify medical tools/devices.
+- Ability to generate realistic images of medical tools using a stable diffusion-based provider (ensure non-fantasy style).
+- Database-like knowledge of medical tools, including surgical instruments, diagnostic devices, and disposables.
+📢 Language Style:
+- Use formal but natural Persian: "این وسیله *استتوسکوپ* نام دارد و برای گوش دادن به صداهای قلب استفاده می‌شود."
+- Incorporate medical emojis (🩺💉🔬) for clarity and engagement.
+- Emphasize that this is informational and not a substitute for professional training or use.
 """
 }
 
@@ -282,17 +300,18 @@ TOOLBOX_MENU_KEYBOARD = ReplyKeyboardMarkup([
     ["🧪 بررسی آزمایش", "📈 تحلیل نوار قلب"],
     ["🩻 تفسیر رادیولوژی", "🧫 تشخیص علائم"],
     ["💊 شناسایی داروها", "🩹 مراقبت از زخم"],
-    ["🎚 شاخص توده بدنی", "🔙 بازگشت"]
+    ["🎚 شاخص توده بدنی", "💉 وسایل پزشکی"],
+    ["🔙 بازگشت"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
 # تعریف منوی زیر دکمه‌ها با ایموجی در سمت راست
 SUB_MENU_KEYBOARD = ReplyKeyboardMarkup([
- ["🔙 بازگشت"]
+    ["🔙 بازگشت"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
 # منوی پشتیبانی با ایموجی در سمت راست
 SUPPORT_KEYBOARD = ReplyKeyboardMarkup([
- ["🔙 بازگشت"]
+    ["🔙 بازگشت"]
 ], resize_keyboard=True, one_time_keyboard=False)
 
 async def check_rate_limit(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
@@ -818,6 +837,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # نادیده گرفتن پیام‌های ادمین در حالت admin_reply
     if user_id == ADMIN_ID and context.user_data.get("mode") == "admin_reply":
+        await handle_admin_reply(update, context)
         return
 
     # مدیریت دکمه بازگشت در همه حالت‌ها
@@ -868,7 +888,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mode = context.user_data.get("mode")
     logger.info(f"پردازش پیام در حالت: {mode}")
 
-    # مدیریت دکمه‌های منوی اصلی
+    # مدیریت دکمه‌های منوی اصلی و ابزارها
     if message_text == "🩺 مشاوره پزشکی":
         AI_CHAT_USERS.add(user_id)
         context.user_data.clear()
@@ -914,6 +934,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif message_text == "🧰 جعبه ابزار پزشکی":
         await update.message.reply_text(
             (
+_probability": 0.95
                 "🧰 *جعبه ابزار پزشکی* باز شد!\n\n"
                 "یکی از ابزارهای زیر رو انتخاب کن:"
             ),
@@ -941,7 +962,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["chat_history"] = []
         await update.message.reply_text(
             (
-                "📈 *تحلیل نوار قلب* فعال شد!\n\n"
+                "📈 *تحلیلنواحلیل نوار قلب* فعال شد!\n\n"
                 "تصویر نوار قلب بفرست یا سؤالت رو بگو!\n"
                 "مثلاً: *ریتم نامنظم یعنی چی؟* 😊"
             ),
@@ -1018,6 +1039,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=SUB_MENU_KEYBOARD,
             parse_mode="Markdown"
         )
+    elif message_text == "💉 وسایل پزشکی":
+        AI_CHAT_USERS.add(user_id)
+        context.user_data.clear()
+        context.user_data["mode"] = "medical_tools"
+        context.user_data["chat_history"] = []
+        await update.message.reply_text(
+            (
+                "💉 *شناسایی وسایل پزشکی* فعال شد!\n\n"
+                "تصویر وسیله پزشکی بفرست یا اسم وسیله رو بگو!\n"
+                "مثلاً: *سرنگ* یا تصویر یه دستگاه پزشکی 😊"
+            ),
+            reply_markup=SUB_MENU_KEYBOARD,
+            parse_mode="Markdown"
+        )
     elif message_text == "⁉️ راهنما":
         guide_message = (
             "📖 *راهنمای استفاده از دستیار پزشکی*:\n\n"
@@ -1032,6 +1067,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "  - *شناسایی داروها 💊*: تصویر قرص یا سؤال دارویی بفرست.\n"
             "  - *مراقبت از زخم 🩹*: تصویر زخم یا علائم بفرست.\n"
             "  - *شاخص توده بدنی 🎚*: قد و وزن رو بگو تا BMI محاسبه بشه.\n"
+            "  - *وسایل پزشکی 💉*: تصویر یا اسم وسیله پزشکی بفرست.\n"
             "- **پشتیبانی 💬**: برای سؤالات دیگه، متن، عکس، ویدیو یا فایل بفرست.\n\n"
             "*همیشه برای تشخیص یا درمان با پزشک مشورت کن!* 🩺\n"
             "سؤالی داری؟ یکی از گزینه‌ها رو انتخاب کن! 😊"
@@ -1081,40 +1117,91 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # استفاده از g4f
         client = Client()
-        for attempt in range(3):  # افزایش تعداد تلاش‌ها
+        if context.user_data["mode"] == "medical_tools":
             try:
+                # درخواست تولید تصویر و توضیحات برای وسایل پزشکی
+                image_prompt = f"Generate a realistic image of a medical tool named '{user_message}' (e.g., syringe, stethoscope). The image should be photorealistic, not cartoonish or fantasy-style. Provide the tool's name and a detailed description of its use, materials, and clinical applications in Persian."
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",  # تغییر به gpt-4o-mini
-                    messages=messages,
-                    max_tokens=300,
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": image_prompt}
+                    ],
+                    max_tokens=500,
                     seed=42
                 )
+                ai_response = response.choices[0].message.content.strip()
+
+                # فرض می‌کنیم G4F تصویر را به صورت URL یا فایل برگردانده
+                # توجه: این بخش به ارائه‌دهنده تصویر G4F بستگی دارد
+                image_url = None  # باید از پاسخ G4F استخراج شود یا از API تولید تصویر
                 try:
                     await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
                 except TelegramError as e:
                     logger.error(f"خطا در حذف پیام موقت: {e}")
 
-                ai_response = response.choices[0].message.content.strip()
+                if image_url:
+                    await context.bot.send_photo(
+                        chat_id=chat_id,
+                        photo=image_url,
+                        caption=ai_response,
+                        parse_mode="Markdown",
+                        reply_markup=SUB_MENU_KEYBOARD
+                    )
+                else:
+                    await update.message.reply_text(
+                        ai_response,
+                        reply_markup=SUB_MENU_KEYBOARD,
+                        parse_mode="Markdown"
+                    )
                 chat_history.append({"role": "assistant", "content": ai_response})
                 context.user_data["chat_history"] = chat_history
+            except Exception as e:
+                logger.error(f"خطا در تولید تصویر یا توضیحات برای وسیله پزشکی: {str(e)}")
+                try:
+                    await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
+                except TelegramError as e:
+                    logger.error(f"خطا در حذف پیام موقت: {e}")
                 await update.message.reply_text(
-                    ai_response,
+                    "اوپس، مشکلی در شناسایی یا تولید تصویر پیش اومد! 😔 لطفاً دوباره امتحان کن.",
                     reply_markup=SUB_MENU_KEYBOARD,
                     parse_mode="Markdown"
                 )
-                break
-            except Exception as e:
-                logger.error(f"خطا در اتصال به g4f (تلاش {attempt + 1}): {str(e)}")
-                if attempt == 2:
+        else:
+            for attempt in range(3):  # افزایش تعداد تلاش‌ها
+                try:
+                    response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=messages,
+                        max_tokens=300,
+                        seed=42
+                    )
                     try:
                         await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
                     except TelegramError as e:
                         logger.error(f"خطا در حذف پیام موقت: {e}")
+
+                    ai_response = response.choices[0].message.content.strip()
+                    chat_history.append({"role": "assistant", "content": ai_response})
+                    context.user_data["chat_history"] = chat_history
                     await update.message.reply_text(
-                        "اوه، *ابزار تشخیص‌مون* نیاز به بررسی داره! 💉 لطفاً دوباره سؤالت رو بفرست. 😊",
+                        ai_response,
                         reply_markup=SUB_MENU_KEYBOARD,
                         parse_mode="Markdown"
                     )
+                    break
+                except Exception as e:
+                    logger.error(f"خطا در اتصال به g4f (تلاش {attempt + 1}): {str(e)}")
+                    if attempt == 2:
+                        try:
+                            await context.bot.delete_message(chat_id=chat_id, message_id=temp_message.message_id)
+                        except TelegramError as e:
+                            logger.error(f"خطا در حذف پیام موقت: {e}")
+                        await update.message.reply_text(
+                            "اوه، *ابزار تشخیص‌مون* نیاز به بررسی داره! 💉 لطفاً دوباره سؤالت رو بفرست. 😊",
+                            reply_markup=SUB_MENU_KEYBOARD,
+                            parse_mode="Markdown"
+                        )
     else:
         await update.message.reply_text(
             "لطفاً یکی از گزینه‌های *منو* رو انتخاب کن! 😊",
@@ -1196,7 +1283,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for attempt in range(3):  # افزایش تعداد تلاش‌ها
             try:
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",  # تغییر به gpt-4o-mini
+                    model="gpt-4o-mini",
                     messages=messages,
                     max_tokens=300,
                     seed=42
@@ -1209,11 +1296,22 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ai_response = response.choices[0].message.content.strip()
                 chat_history.append({"role": "assistant", "content": ai_response})
                 context.user_data["chat_history"] = chat_history
-                await update.message.reply_text(
-                    ai_response,
-                    reply_markup=SUB_MENU_KEYBOARD,
-                    parse_mode="Markdown"
-                )
+
+                # اگر در حالت وسایل پزشکی هستیم، تصویر ارسالی با توضیحات برگردانده می‌شود
+                if mode == "medical_tools":
+                    await context.bot.send_photo(
+                        chat_id=chat_id,
+                        photo=file_url,
+                        caption=ai_response,
+                        parse_mode="Markdown",
+                        reply_markup=SUB_MENU_KEYBOARD
+                    )
+                else:
+                    await update.message.reply_text(
+                        ai_response,
+                        reply_markup=SUB_MENU_KEYBOARD,
+                        parse_mode="Markdown"
+                    )
                 logger.info(f"پاسخ موفق برای تصویر در حالت {mode}")
                 break
             except Exception as e:
